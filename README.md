@@ -6,71 +6,90 @@
 
 A lightweight, production-ready Visual Studio Code extension for **Amazon Athena** and **AWS Glue Data Catalog**. Query data lakes, browse catalogs and schemas, manage multiple connections with Browser SSO/IAM, track query history with pagination, and inspect results with built-in export capabilities.
 
+![AWS Athena SQL Client - Query Execution and Results](media/screenshots/query-execution-and-results.png)
+
 ---
 
 ## 🌟 Key Features
 
-### 1. Connection Management (`athena.connections`)
-- **Activity Bar View**: Manage active and saved connections with intuitive status indicators (green plug for connected, grey for disconnected).
-- **Interactive Webview Form**:
-  - **Connection Name**: Unique, mandatory name per connection.
-  - **Authentication Methods**:
-    - **Browser SSO / SAML**: Provides **SAML Identity Provider URL** input with a direct **"Open in Browser"** button to log in via your system's default browser (macOS/Windows) without installing headless tools or chromium.
-    - **Access Key ID & Secret Key**: Secure credential storage using VS Code `SecretStorage` (`context.secrets`).
-    - **AWS Profile**: Seamless integration with local `~/.aws/credentials` and `~/.aws/config`.
-    - **Default Credential Chain**: Standard AWS SDK provider chain.
-  - **Dynamic Output Location (`OutputLocation`) Validation**: Automatically marks `Query Result Location (s3://...)` as mandatory when using the `primary` or empty workgroup, and validates URI format.
-  - **Encryption Support**: Configure `NONE`, `SSE_S3`, `SSE_KMS`, or `CSE_KMS` with dynamic KMS Key ARN fields.
-  - **Test Connection**: Instant background ping (`ListWorkGroupsCommand`) with real-time green/red response banners.
-- **Context Actions**: Right-click to **Connect**, **Refresh**, **Duplicate**, **Edit**, or **Delete**.
+### 1. Multi-Tab SQL Editor & Query Execution
+- **CodeLens Integration**: Automatically displays **"▶ Run Query"** above individual SQL statements (`SELECT`, `WITH`, `CREATE`, `INSERT`, etc.) in `.sql` files.
+- **Flexible Execution**: Run the statement under the cursor, highlighted SQL selection, or the entire file via `Ctrl+Enter` (`Cmd+Enter` on macOS) or the editor title bar button.
+- **In-Flight Cancellation**: Cancel running queries cleanly at any moment via `athena.cancelQuery` or the notification progress bar.
 
-### 2. Catalog / Schema / Table Explorer (`athena.explorer`)
+### 2. Query Results Panel
+- **Horizontal Split Layout**: Results automatically open in a dedicated panel directly below your SQL editor for seamless query-and-inspect workflows.
+- **Multi-Tab Results**: Each query run produces an independent result tab (`Result 1`, `Result 2`, ...) without overwriting prior query outputs.
+- **Pagination & Metrics**: Fast client-side pagination with row counts, execution duration, data scanned (in KB/MB/GB), and AWS Query Execution ID.
+- **Data Exporting**:
+  - **Copy CSV**: Instant clipboard copy.
+  - **Export CSV**: Prompts file save dialog and saves tabular data to `.csv`.
+  - **Export JSON**: Formats and exports data as structured JSON.
+- **Native Theme Styling**: Matches VS Code native dark, light, and high-contrast themes using standard design tokens.
+
+![Multi-Query CodeLens and Tabbed Results with Pagination](media/screenshots/multi-query-results-pagination.png)
+
+---
+
+### 3. Catalog / Schema / Table Explorer (`athena.explorer`)
 - **Hierarchical 4-Level Tree**:
   - `Data Catalog` (e.g., `AwsDataCatalog`)
   - `Database / Schema`
-  - `Tables & Views` (distinct icons for tables vs virtual views)
-  - `Columns` (column name, data type, and partition key indicators)
-- **High Performance & Cost-Free**: Metadata is read via AWS Glue APIs (`GetDatabases`, `GetTables`, `GetTable`), preventing unnecessary Athena query charges.
+  - `Tables & Views` (distinct icons for physical tables vs virtual views)
+  - `Columns` (column name, data type, and partition key badges)
+- **High Performance & Zero Query Cost**: Reads catalog metadata via AWS Glue APIs (`GetDatabases`, `GetTables`, `GetTable`), avoiding Athena scan costs.
+- **Productive Context Menus**:
+  - **Preview Table (First 50 Rows)**: Instantly generates and runs a `SELECT * FROM ... LIMIT 50` query.
+  - **Show Table DDL**: Executes `SHOW CREATE TABLE` to view full table schema and partition specs.
+  - **Copy Table Name**: Quick clipboard copy for rapid SQL drafting.
 
-### 3. Query History (`athena.history`)
-- **Sorted Execution History**: Displays previous query runs sorted descending by submission time.
-- **Local Pagination**: 5 queries per page, up to 10 pages (max 50 queries) with Prev/Next navigation in the view title bar.
-- **Rich Status Indicators**: `SUCCEEDED` (green), `FAILED` (red), `RUNNING` / `QUEUED` (blue), and `CANCELLED` (yellow).
-- **Execution Metrics**: Inspect elapsed runtime, data scanned in bytes, and exact error messages on hover via Markdown tooltips.
-- **Click-to-Open**: Clicking any history item opens the original SQL statement directly in a new editor tab.
+### 4. Query History (`athena.history`)
+- **Chronological Execution Log**: Sorted descending by submission time with clear status indicators (`SUCCEEDED`, `FAILED`, `RUNNING`, `CANCELLED`).
+- **Paginated Navigation**: Configurable page navigation (5 queries per page, up to 50 items) right in the view header.
+- **Execution Metrics on Hover**: Inspect duration, data scanned, submission time, and complete error diagnostics via rich Markdown tooltips.
+- **Click-to-Open**: Click any history entry to open the executed SQL statement in a fresh editor tab.
 
-### 4. Saved Queries (`athena.savedQueries`)
-- **Workgroup Named Queries**: Lists Athena Named Queries associated with your active workgroup.
-- **Save from Active Editor**: Use the header `+` button to name and save any SQL statement from the editor.
-- **Open & Delete**: Open saved queries into an editor with a single click or delete them via context actions.
+### 5. Saved Queries (`athena.savedQueries`)
+- **Local & File-Backed Storage**: Queries are saved locally to `.vscode/athena-saved-queries.json` or user profile for full lifecycle control, privacy, and team version-control.
+- **One-Click Execution**: Click any saved query to open it directly in the main SQL editor.
+- **Easy Management**: Save from the active editor with the `+` icon, rename, or delete at any time.
 
-### 5. Multi-Tab SQL Editor & Query Execution
-- **CodeLens Integration**: Automatically displays **"▶ Run Query"** above top-level SQL statements (`SELECT`, `WITH`, `CREATE`, `INSERT`, etc.) in `.sql` files.
-- **Flexible Execution**: Runs either highlighted SQL selection or the entire document via `athena.runQuery` (`Ctrl+Enter` / `Cmd+Enter` or editor title bar).
-- **In-Flight Cancellation**: Cancel running queries cleanly via `athena.cancelQuery` or the notification progress dialog.
+![Catalog Explorer, Query History, and Saved Queries](media/screenshots/catalog-explorer-and-history.png)
 
-### 6. Query Results Webview Panel
-- **Multi-Tab Results**: Each query run creates an independent result tab (`Result 1`, `Result 2`, ...).
-- **Pagination**: Client-side pagination (100 rows per page) for responsive rendering on large result sets.
-- **Execution Metrics**: Status, duration, data scanned, total rows, and Query Execution ID prominently displayed.
-- **Exporting**:
-  - **Copy CSV**: Quick clipboard export.
-  - **Export CSV**: Prompts save dialog and writes `.csv` to disk.
-  - **Export JSON**: Formats tabular data as structured JSON.
-- **Theme Native**: Styled entirely with native VS Code design tokens (`var(--vscode-*)`).
+---
+
+### 6. Connection Management (`athena.connections`)
+- **Multi-Profile Support**: Manage multiple Athena environments (dev, staging, prod) with instant active-connection switching.
+- **Interactive Configuration Panel**:
+  - **Connection Name**: Unique name per connection.
+  - **AWS Region & Workgroup**: Target specific AWS regions and Athena workgroups.
+  - **Catalog & S3 Result Location**: Dynamic validation for S3 output locations with automatic requirement checks.
+  - **Encryption Support**: Built-in support for `NONE`, `SSE_S3`, `SSE_KMS`, and `CSE_KMS` with KMS Key ARN configuration.
+  - **Test Connection**: Instant background ping (`ListWorkGroupsCommand`) with real-time green/red health indicators.
+
+![Athena Connection Configuration](media/screenshots/connection-manager.png)
+
+- **Comprehensive Authentication Options**:
+  - **Default Credential Chain**: Standard AWS SDK provider chain (environment variables, IAM roles, ECS/EC2 metadata).
+  - **AWS Profile**: Use local profiles configured in `~/.aws/credentials` and `~/.aws/config`.
+  - **Access Key ID & Secret Key**: Securely stored using VS Code `SecretStorage` with OS-level keychain encryption.
+  - **Browser SSO / SAML**: One-click **"Open in Browser"** to authenticate via your organization's SAML/SSO Identity Provider URL without headless dependencies.
+
+![Authentication Methods](media/screenshots/auth-methods.png)
 
 ---
 
 ## 🛠️ Architecture
 
 ```
-athena-query-workbench/
+aws-athena-sql-client/
 ├── package.json               # Extension manifest with views, commands & menus
 ├── tsconfig.json              # TypeScript strict configuration (ES2022)
 ├── esbuild.mjs                # Bundler configuration
 ├── media/                     # Amazon Athena branding & themed SVG icons
 │   ├── icon.png               # High-res marketplace icon
 │   ├── icon.svg               # Activity bar icon (monochrome currentColor)
+│   ├── screenshots/           # Extension preview screenshots
 │   ├── dark/                  # 10 icons for dark theme
 │   └── light/                 # 10 icons for light theme
 └── src/
@@ -134,4 +153,5 @@ athena-query-workbench/
 
 ## 📄 License
 MIT © [sankush](https://github.com/san-kush)
+
 
