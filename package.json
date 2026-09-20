@@ -9,6 +9,9 @@
     "type": "git",
     "url": "https://github.com/san-kush/aws-athena-sql-client.git"
   },
+  "bugs": {
+    "url": "https://github.com/san-kush/aws-athena-sql-client/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

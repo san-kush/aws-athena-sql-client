@@ -151,7 +151,15 @@ aws-athena-sql-client/
 
 ---
 
+## 💬 Support & Feedback
+
+If you encounter any issues, have feature requests, or need help, please feel free to open an issue on our GitHub repository:
+
+👉 **[Submit an Issue / Feature Request](https://github.com/san-kush/aws-athena-sql-client/issues)**
+
+Contributions, suggestions, and feedback are always welcome!
+
+---
+
 ## 📄 License
 MIT © [sankush](https://github.com/san-kush)
-
-
