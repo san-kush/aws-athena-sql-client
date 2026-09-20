@@ -1,8 +1,7 @@
 # AWS Athena SQL Client
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://marketplace.visualstudio.com/)
-[![Publisher](https://img.shields.io/badge/publisher-sankush-purple.svg)](https://marketplace.visualstudio.com/publishers/sankush)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue.svg)](https://www.typescriptlang.org/)
+[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/sankush.aws-athena-sql-client?label=VS%20Code%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=sankush.aws-athena-sql-client)
+[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/sankush.aws-athena-sql-client)](https://marketplace.visualstudio.com/items?itemName=sankush.aws-athena-sql-client)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A lightweight, production-ready Visual Studio Code extension for **Amazon Athena** and **AWS Glue Data Catalog**. Query data lakes, browse catalogs and schemas, manage multiple connections with Browser SSO/IAM, track query history with pagination, and inspect results with built-in export capabilities.
