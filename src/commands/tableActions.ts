@@ -4,6 +4,7 @@ import type { ConnectionManager } from '../services/ConnectionManager';
 import type { QueryHistoryTreeProvider } from '../providers/QueryHistoryTreeProvider';
 import type { CatalogTreeItem } from '../providers/CatalogTreeProvider';
 import { ResultsPanel } from '../panels/ResultsPanel';
+import { formatViewDdl } from '../utils/formatters';
 
 export async function previewTable(
     athenaService: AthenaClientService,
@@ -97,10 +98,10 @@ export async function showTableDdl(
     const database = item.info.databaseName;
     const table = item.info.name;
     const isView = item.info.type === 'view';
-    // Athena SHOW CREATE syntax uses unquoted/backtick identifiers
+    // Athena standard syntax: double quotes for identifiers in ANSI SQL / Trino
     const sql = isView
-        ? `SHOW CREATE VIEW \`${database}\`.\`${table}\``
-        : `SHOW CREATE TABLE \`${database}\`.\`${table}\``;
+        ? `SHOW CREATE VIEW "${database}"."${table}"`
+        : `SHOW CREATE TABLE "${database}"."${table}"`;
 
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
@@ -123,26 +124,39 @@ export async function showTableDdl(
 
         try {
             // 1. First attempt: try Athena SHOW CREATE query
-            const result = await athenaService.executeQuery(sql, database, (status) => {
-                progress.report({ message: status });
-            });
-
-            if (result.rows && result.rows.length > 0) {
-                ddlContent = result.rows.map(row => row.join('')).join('\n');
+            let result: any;
+            try {
+                result = await athenaService.executeQuery(sql, database, (status) => {
+                    progress.report({ message: status });
+                });
+            } catch {
+                // If double quotes failed, try alternate quoting (backticks for Hive/legacy compatibility)
+                const altSql = isView
+                    ? `SHOW CREATE VIEW \`${database}\`.\`${table}\``
+                    : `SHOW CREATE TABLE \`${database}\`.\`${table}\``;
+                result = await athenaService.executeQuery(altSql, database, (status) => {
+                    progress.report({ message: status });
+                });
             }
 
-            historyProvider.addEntry({
-                queryExecutionId: result.queryExecutionId,
-                query: sql,
-                status: result.status,
-                completionTime: new Date(),
-                elapsedTimeMs: result.elapsedTimeMs,
-                dataScannedBytes: result.dataScannedBytes,
-                database,
-                workgroup: activeConnection.workgroup
-            });
+            if (result && result.rows && result.rows.length > 0) {
+                ddlContent = result.rows.map((row: string[]) => row.join('')).join('\n');
+            }
+
+            if (result) {
+                historyProvider.addEntry({
+                    queryExecutionId: result.queryExecutionId,
+                    query: sql,
+                    status: result.status,
+                    completionTime: new Date(),
+                    elapsedTimeMs: result.elapsedTimeMs,
+                    dataScannedBytes: result.dataScannedBytes,
+                    database,
+                    workgroup: activeConnection.workgroup
+                });
+            }
         } catch (athenaErr: any) {
-            // 2. Fallback: If Athena doesn't support SHOW CREATE for this table (e.g. Iceberg, external formats),
+            // 2. Fallback: If Athena doesn't support SHOW CREATE for this table/view (or permissions issue),
             // construct the accurate DDL directly from AWS Glue Catalog metadata!
             try {
                 ddlContent = await athenaService.getTableDdl(
@@ -157,6 +171,12 @@ export async function showTableDdl(
         }
 
         if (ddlContent) {
+            if (isView || ddlContent.includes('Presto View:')) {
+                ddlContent = formatViewDdl(database, table, ddlContent);
+            }
+            if (!ddlContent.trim().endsWith(';')) {
+                ddlContent = `${ddlContent.trim()};\n`;
+            }
             const doc = await vscode.workspace.openTextDocument({
                 content: ddlContent,
                 language: 'sql'

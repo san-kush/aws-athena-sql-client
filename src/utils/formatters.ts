@@ -37,3 +37,50 @@ export function truncateQuery(query: string, maxLength: number = 80): string {
   if (singleLine.length <= maxLength) { return singleLine; }
   return singleLine.substring(0, maxLength - 3) + '...';
 }
+
+/**
+ * Formats a view definition into a clean, executable SQL CREATE OR REPLACE VIEW statement.
+ * Handles Athena / Presto base64-encoded JSON stored in Glue Data Catalog:
+ * /* Presto View: <base64> *\/
+ */
+export function formatViewDdl(databaseName: string, tableName: string, rawViewText: string): string {
+  if (!rawViewText) {
+    return `-- View definition not available for "${databaseName}"."${tableName}";`;
+  }
+
+  const text = rawViewText.trim();
+
+  // 1. Check for Athena Presto/Trino view format: /* Presto View: <base64> */
+  const prestoMatch = text.match(/\/\*\s*Presto View:\s*([A-Za-z0-9+/=]+)\s*\*\//i);
+  if (prestoMatch && prestoMatch[1]) {
+    try {
+      const cleanB64 = prestoMatch[1].replace(/\s+/g, '');
+      const decodedJson = Buffer.from(cleanB64, 'base64').toString('utf-8');
+      const parsed = JSON.parse(decodedJson);
+      if (parsed.originalSql) {
+        const sql = parsed.originalSql.trim().replace(/;+$/, '');
+        if (/^\s*CREATE\s+/i.test(sql)) {
+          return `${sql};`;
+        }
+        return `CREATE OR REPLACE VIEW "${databaseName}"."${tableName}" AS\n${sql};`;
+      }
+    } catch {
+      // Fall through if decoding or JSON parse fails
+    }
+  }
+
+  // 2. Already a full CREATE VIEW statement
+  if (/^\s*CREATE\s+/i.test(text)) {
+    const clean = text.replace(/;+$/, '');
+    return `${clean};`;
+  }
+
+  // 3. Plain SELECT or WITH query
+  if (/^\s*SELECT\s+/i.test(text) || /^\s*WITH\s+/i.test(text)) {
+    const clean = text.replace(/;+$/, '');
+    return `CREATE OR REPLACE VIEW "${databaseName}"."${tableName}" AS\n${clean};`;
+  }
+
+  // Fallback
+  return text.endsWith(';') ? text : `${text};`;
+}

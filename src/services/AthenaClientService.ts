@@ -29,6 +29,7 @@ async function openUrl(url: string): Promise<void> {
 }
 import type { ConnectionConfig, ConnectionSecrets, QueryResult, QueryHistoryEntry, SavedQuery, ColumnInfo, QueryStatus } from '../models/types';
 import { DEFAULT_CATALOG, POLL_INTERVALS } from '../utils/constants';
+import { formatViewDdl } from '../utils/formatters';
 
 export class AthenaClientService {
   private _athenaClient: AthenaClient | undefined;
@@ -172,13 +173,14 @@ export class AthenaClientService {
       throw new Error(`Table ${databaseName}.${tableName} not found in Glue catalog`);
     }
 
-    // If it's a view, return ViewOriginalText or ViewExpandedText
-    if (table.ViewOriginalText) {
-      return table.ViewOriginalText.trim();
-    }
+    // If it's a view, return parsed and formatted CREATE OR REPLACE VIEW statement
     const isView = table.TableType === 'VIRTUAL_VIEW' || table.TableType?.includes('VIEW');
-    if (isView && table.ViewExpandedText) {
-      return table.ViewExpandedText.trim();
+    const viewRawText = table.ViewOriginalText || table.ViewExpandedText;
+    if (viewRawText) {
+      return formatViewDdl(databaseName, tableName, viewRawText);
+    }
+    if (isView) {
+      return `-- View definition not available in Glue catalog for "${databaseName}"."${tableName}";`;
     }
 
     // Build CREATE EXTERNAL TABLE DDL
@@ -329,10 +331,23 @@ export class AthenaClientService {
     }
 
     const rawRows = resultsResponse.ResultSet?.Rows || [];
-    // Skip the first row as it contains headers
-    for (let i = 1; i < rawRows.length; i++) {
+    // In Athena GetQueryResults, SELECT/DML queries include a duplicate header row as rawRows[0]
+    // where each column value matches the column name from ResultSetMetadata.
+    // DDL statements (like SHOW CREATE TABLE, SHOW CREATE VIEW) do NOT include a header row;
+    // rawRows[0] is the first line of the DDL statement (e.g. "CREATE EXTERNAL TABLE ...").
+    let startIndex = 0;
+    if (rawRows.length > 0 && columns.length > 0) {
+      const firstRowValues = rawRows[0].Data?.map(d => d.VarCharValue ?? '') || [];
+      const isHeaderRow = firstRowValues.length === columns.length &&
+        firstRowValues.every((val, idx) => val.toLowerCase() === (columns[idx].name || '').toLowerCase());
+      if (isHeaderRow) {
+        startIndex = 1;
+      }
+    }
+
+    for (let i = startIndex; i < rawRows.length; i++) {
       const row = rawRows[i];
-      const rowData = row.Data?.map(d => d.VarCharValue || '') || [];
+      const rowData = row.Data?.map(d => d.VarCharValue ?? '') || [];
       rows.push(rowData);
     }
 
