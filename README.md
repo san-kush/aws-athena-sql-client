@@ -118,32 +118,6 @@ aws-athena-sql-client/
 
 ---
 
-## 🚀 Getting Started
-
-### Prerequisites
-- Visual Studio Code version `1.85.0` or higher
-- Node.js `18+` or `20+` (for development)
-- AWS credentials with permissions for Athena and Glue
-
-### Installation & Development
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/san-kush/aws-athena-sql-client.git
-   cd aws-athena-sql-client
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Compile & Bundle:
-   ```bash
-   npm run compile   # TypeScript check (strict mode)
-   npm run build     # esbuild bundle to dist/extension.js
-   ```
-4. Press `F5` in VS Code to launch the **Extension Development Host**.
-
----
-
 ## 🔒 Security & Best Practices
 - **Credentials Protection**: Sensitive AWS keys are stored strictly in VS Code `SecretStorage` (`context.secrets`) using OS-level keychain encryption. Non-sensitive configurations are stored in `globalState`.
 - **Content Security Policy (CSP)**: All Webviews use strict CSP meta tags with unique cryptographic nonces.
