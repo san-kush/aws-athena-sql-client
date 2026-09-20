@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+out/
+
+# Extension packages
+*.vsix
+
+# Logs & Temporary files
+*.log
+npm-debug.log*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# VS Code test instance
+.vscode-test/

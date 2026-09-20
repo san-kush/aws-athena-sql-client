@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to the **AWS Athena SQL Client** extension will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.1.0] - 2026-09-21
+
+### Added
+- **Multi-Statement SQL CodeLens**: Added "▶ Run Query" CodeLens above each individual SQL statement in `.sql` editors. Parses statement boundaries to execute only the targeted query without "Only one sql statement is allowed" errors.
+- **Catalog Explorer Table Actions**:
+  - **Preview**: Right-click on any table or view to execute `SELECT * FROM "<db>"."<table>" LIMIT 10`.
+  - **Show DDL**: Right-click on any table or view to generate and display the DDL in a new SQL text editor tab. Includes automatic fallback to AWS Glue Data Catalog metadata (`GetTable`) if Athena's query engine rejects the command.
+- **File-Backed Local Saved Queries**:
+  - Saved queries are stored locally as individual `.sql` files on disk.
+  - Quick-save queries without prompts for database or catalog.
+  - Added "Open Saved Queries Folder" action (`$(folder)`) to view, copy, or manage query files in your operating system's file manager.
+  - Clicking any saved query opens the actual `.sql` file in the top editor area (`ViewColumn.One`), supporting direct saving with `Ctrl+S`.
+- **Local Query History**:
+  - Tracks locally executed queries with execution status, run time, data scanned in bytes, and error messages.
+  - Persisted locally across VS Code restarts.
+  - Clear History action (`$(clear-all)`).
+  - Clicking any history item opens the SQL query in the top editor area (`ViewColumn.One`).
+- **Horizontal Results Layout**:
+  - Query results open in a two-row horizontal layout below the editor (`ViewColumn.Two`), maximizing horizontal width for tabular data.
+  - Tabular data viewer with pagination, CSV copy, CSV export, and JSON export.
+- **AWS Connection Management**:
+  - Support for multiple named connections.
+  - Authentication options: AWS IAM Access Keys, AWS Named Profile, and AWS IAM Identity Center (SSO).
+  - Secure credential storage using VS Code Secrets Storage API.
+  - Glue Data Catalog tree browser for catalogs, databases, tables, views, and columns (including partition keys).
+- **Licensing**: Licensed under the open-source MIT License.
+
+---
+
+[0.1.0]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.0
+

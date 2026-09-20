@@ -1,0 +1,367 @@
+{
+  "name": "aws-athena-sql-client",
+  "displayName": "AWS Athena SQL Client",
+  "description": "Lightweight VS Code extension for Amazon Athena — query execution, Glue catalog browsing, connection management with SSO/IAM support, query history, and saved queries.",
+  "version": "0.1.0",
+  "publisher": "sankush",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/san-kush/aws-athena-sql-client.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science"
+  ],
+  "keywords": [
+    "aws",
+    "athena",
+    "sql",
+    "query",
+    "glue"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onView:athena.connections",
+    "onView:athena.explorer",
+    "onView:athena.history",
+    "onView:athena.savedQueries",
+    "onLanguage:sql"
+  ],
+  "scripts": {
+    "compile": "tsc -noEmit",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "athena-workbench",
+          "title": "AWS Athena SQL Client",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "athena-workbench": [
+        {
+          "id": "athena.connections",
+          "name": "Connections"
+        },
+        {
+          "id": "athena.explorer",
+          "name": "Catalog Explorer"
+        },
+        {
+          "id": "athena.history",
+          "name": "Query History"
+        },
+        {
+          "id": "athena.savedQueries",
+          "name": "Saved Queries"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "athena.addConnection",
+        "title": "Add Connection",
+        "category": "Athena",
+        "icon": "$(add)"
+      },
+      {
+        "command": "athena.editConnection",
+        "title": "Edit Connection",
+        "category": "Athena",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "athena.deleteConnection",
+        "title": "Delete Connection",
+        "category": "Athena",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "athena.duplicateConnection",
+        "title": "Duplicate Connection",
+        "category": "Athena",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "athena.connect",
+        "title": "Connect",
+        "category": "Athena"
+      },
+      {
+        "command": "athena.disconnect",
+        "title": "Disconnect",
+        "category": "Athena"
+      },
+      {
+        "command": "athena.refreshConnections",
+        "title": "Refresh Connections",
+        "category": "Athena",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "athena.refreshExplorer",
+        "title": "Refresh Catalog",
+        "category": "Athena",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "athena.refreshHistory",
+        "title": "Refresh History",
+        "category": "Athena",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "athena.clearHistory",
+        "title": "Clear History",
+        "category": "Athena",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "athena.refreshSavedQueries",
+        "title": "Refresh Saved Queries",
+        "category": "Athena",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "athena.runQuery",
+        "title": "Run Query",
+        "category": "Athena",
+        "icon": "$(play)"
+      },
+      {
+        "command": "athena.cancelQuery",
+        "title": "Cancel Query",
+        "category": "Athena",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "athena.saveQuery",
+        "title": "Save Query",
+        "category": "Athena",
+        "icon": "$(add)"
+      },
+      {
+        "command": "athena.openSavedQueriesFolder",
+        "title": "Open Saved Queries Folder",
+        "category": "Athena",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "athena.deleteSavedQuery",
+        "title": "Delete Saved Query",
+        "category": "Athena",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "athena.openSavedQuery",
+        "title": "Open Saved Query",
+        "category": "Athena"
+      },
+      {
+        "command": "athena.openHistoryQuery",
+        "title": "Open Query from History",
+        "category": "Athena"
+      },
+      {
+        "command": "athena.previewTable",
+        "title": "Preview",
+        "category": "Athena",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "athena.showTableDdl",
+        "title": "Show DDL",
+        "category": "Athena",
+        "icon": "$(code)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "athena.addConnection",
+          "when": "view == athena.connections",
+          "group": "navigation"
+        },
+        {
+          "command": "athena.refreshConnections",
+          "when": "view == athena.connections",
+          "group": "navigation"
+        },
+        {
+          "command": "athena.refreshExplorer",
+          "when": "view == athena.explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "athena.clearHistory",
+          "when": "view == athena.history",
+          "group": "navigation"
+        },
+        {
+          "command": "athena.refreshHistory",
+          "when": "view == athena.history",
+          "group": "navigation"
+        },
+        {
+          "command": "athena.saveQuery",
+          "when": "view == athena.savedQueries",
+          "group": "navigation@1"
+        },
+        {
+          "command": "athena.openSavedQueriesFolder",
+          "when": "view == athena.savedQueries",
+          "group": "navigation@2"
+        },
+        {
+          "command": "athena.refreshSavedQueries",
+          "when": "view == athena.savedQueries",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "athena.disconnect",
+          "when": "view == athena.connections && viewItem == connection-active",
+          "group": "1_connection@1"
+        },
+        {
+          "command": "athena.refreshConnections",
+          "when": "view == athena.connections && viewItem == connection-active",
+          "group": "1_connection@2"
+        },
+        {
+          "command": "athena.duplicateConnection",
+          "when": "view == athena.connections && viewItem == connection-active",
+          "group": "2_actions@1"
+        },
+        {
+          "command": "athena.editConnection",
+          "when": "view == athena.connections && viewItem == connection-active",
+          "group": "2_actions@2"
+        },
+        {
+          "command": "athena.deleteConnection",
+          "when": "view == athena.connections && viewItem == connection-active",
+          "group": "2_actions@3"
+        },
+        {
+          "command": "athena.connect",
+          "when": "view == athena.connections && viewItem == connection-inactive",
+          "group": "1_connection@1"
+        },
+        {
+          "command": "athena.refreshConnections",
+          "when": "view == athena.connections && viewItem == connection-inactive",
+          "group": "1_connection@2"
+        },
+        {
+          "command": "athena.duplicateConnection",
+          "when": "view == athena.connections && viewItem == connection-inactive",
+          "group": "2_actions@1"
+        },
+        {
+          "command": "athena.editConnection",
+          "when": "view == athena.connections && viewItem == connection-inactive",
+          "group": "2_actions@2"
+        },
+        {
+          "command": "athena.deleteConnection",
+          "when": "view == athena.connections && viewItem == connection-inactive",
+          "group": "2_actions@3"
+        },
+        {
+          "command": "athena.openSavedQuery",
+          "when": "view == athena.savedQueries && viewItem == savedQuery",
+          "group": "inline"
+        },
+        {
+          "command": "athena.deleteSavedQuery",
+          "when": "view == athena.savedQueries && viewItem == savedQuery",
+          "group": "inline"
+        },
+        {
+          "command": "athena.openHistoryQuery",
+          "when": "view == athena.history && viewItem == historyItem",
+          "group": "inline"
+        },
+        {
+          "command": "athena.previewTable",
+          "when": "view == athena.explorer && viewItem == table",
+          "group": "1_table@1"
+        },
+        {
+          "command": "athena.previewTable",
+          "when": "view == athena.explorer && viewItem == view",
+          "group": "1_table@1"
+        },
+        {
+          "command": "athena.showTableDdl",
+          "when": "view == athena.explorer && viewItem == table",
+          "group": "1_table@2"
+        },
+        {
+          "command": "athena.showTableDdl",
+          "when": "view == athena.explorer && viewItem == view",
+          "group": "1_table@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "athena.runQuery",
+          "when": "resourceLangId == sql",
+          "group": "navigation"
+        },
+        {
+          "command": "athena.saveQuery",
+          "when": "resourceLangId == sql",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "athena.connections",
+        "contents": "No connections configured.\n[Add Connection](command:athena.addConnection)"
+      },
+      {
+        "view": "athena.explorer",
+        "contents": "Connect to an Athena instance to browse the data catalog.\n[Add Connection](command:athena.addConnection)"
+      },
+      {
+        "view": "athena.history",
+        "contents": "No query history yet.\nRun a query to see it here."
+      },
+      {
+        "view": "athena.savedQueries",
+        "contents": "No saved queries yet.\n[Save Query](command:athena.saveQuery)"
+      }
+    ]
+  },
+  "dependencies": {
+    "@aws-sdk/client-athena": "^3.700.0",
+    "@aws-sdk/client-glue": "^3.700.0",
+    "@aws-sdk/client-sts": "^3.700.0",
+    "@aws-sdk/credential-providers": "^3.700.0",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "allowScripts": {
+    "esbuild@0.24.2": true
+  }
+}
