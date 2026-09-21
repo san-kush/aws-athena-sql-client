@@ -61,6 +61,16 @@ export class AthenaClientService {
           customBrowser: (url: string) => openUrl(url)
         }
       });
+    } else if (config.authMethod === 'saml') {
+      if (!secrets.accessKeyId || !secrets.secretAccessKey || !secrets.sessionToken) {
+        throw new Error('SAML session credentials are missing or expired. Please click "Launch SAML Login in Browser" to authenticate.');
+      }
+      credentials = async () => ({
+        accessKeyId: secrets.accessKeyId!,
+        secretAccessKey: secrets.secretAccessKey!,
+        sessionToken: secrets.sessionToken,
+        expiration: secrets.sessionExpiration ? new Date(secrets.sessionExpiration) : undefined
+      });
     } else if (config.authMethod === 'default') {
       credentials = undefined;
     }

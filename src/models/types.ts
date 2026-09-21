@@ -1,4 +1,4 @@
-export type AuthMethod = 'accessKeys' | 'profile' | 'sso' | 'default';
+export type AuthMethod = 'accessKeys' | 'profile' | 'sso' | 'saml' | 'default';
 export type EncryptionType = 'NONE' | 'SSE_S3' | 'SSE_KMS' | 'CSE_KMS';
 export type QueryStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
@@ -17,11 +17,15 @@ export interface ConnectionConfig {
   ssoRegion?: string;
   ssoAccountId?: string;
   ssoRoleName?: string;
+  samlUrl?: string;
+  samlRoleArn?: string;
 }
 
 export interface ConnectionSecrets {
   accessKeyId?: string;
   secretAccessKey?: string;
+  sessionToken?: string;
+  sessionExpiration?: number;
 }
 
 export interface QueryHistoryEntry {

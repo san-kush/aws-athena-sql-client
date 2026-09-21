@@ -7,6 +7,7 @@ import { QueryHistoryTreeProvider } from './providers/QueryHistoryTreeProvider';
 import { SavedQueriesTreeProvider } from './providers/SavedQueriesTreeProvider';
 import { SqlCodeLensProvider } from './providers/SqlCodeLensProvider';
 import { ConnectionFormPanel } from './panels/ConnectionFormPanel';
+import { executeSamlLogin } from './services/SamlAuthService';
 import { runQuery } from './commands/runQuery';
 import { cancelQuery } from './commands/cancelQuery';
 import { previewTable, showTableDdl } from './commands/tableActions';
@@ -53,7 +54,38 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand(constants.CMD_CONNECT, async (item: ConnectionTreeItem) => {
             try {
-                const secrets = await connectionManager.getSecrets(item.config.id);
+                let secrets = await connectionManager.getSecrets(item.config.id);
+                if (item.config.authMethod === 'saml') {
+                    const isExpired = !secrets.sessionToken || (secrets.sessionExpiration && secrets.sessionExpiration <= Date.now());
+                    if (isExpired) {
+                        const action = await vscode.window.showWarningMessage(
+                            `SAML session for '${item.config.name}' has expired or is not authenticated. Would you like to log in now?`,
+                            'Log In via Browser',
+                            'Cancel'
+                        );
+                        if (action !== 'Log In via Browser') {
+                            return;
+                        }
+                        const samlResult = await vscode.window.withProgress({
+                            location: vscode.ProgressLocation.Notification,
+                            title: `SAML Login (${item.config.name})`,
+                            cancellable: false
+                        }, async (progress) => {
+                            return await executeSamlLogin(item.config.samlUrl!, item.config.region, (statusMsg) => {
+                                progress.report({ message: statusMsg });
+                            });
+                        });
+                        secrets = {
+                            ...secrets,
+                            accessKeyId: samlResult.accessKeyId,
+                            secretAccessKey: samlResult.secretAccessKey,
+                            sessionToken: samlResult.sessionToken,
+                            sessionExpiration: samlResult.sessionExpiration
+                        };
+                        item.config.samlRoleArn = samlResult.roleArn;
+                        await connectionManager.saveConnection(item.config, secrets);
+                    }
+                }
                 await athenaService.setConnection(item.config, secrets);
                 await connectionManager.setActiveConnection(item.config.id);
                 connectionsProvider.refresh();

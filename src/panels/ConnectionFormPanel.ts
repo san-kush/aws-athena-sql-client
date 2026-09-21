@@ -3,6 +3,7 @@ import { getNonce } from '../utils/formatters';
 import type { ConnectionManager } from '../services/ConnectionManager';
 import { AthenaClientService } from '../services/AthenaClientService';
 import type { ConnectionConfig, ConnectionSecrets } from '../models/types';
+import { executeSamlLogin } from '../services/SamlAuthService';
 import * as crypto from 'crypto';
 
 export class ConnectionFormPanel {
@@ -146,6 +147,43 @@ export class ConnectionFormPanel {
                         }
                         break;
                     }
+                    case 'launchSamlLogin': {
+                        const samlUrl = (message.samlUrl || '').trim();
+                        const region = (message.region || 'us-east-1').trim();
+                        if (!samlUrl) {
+                            this._panel.webview.postMessage({
+                                command: 'samlLoginResult',
+                                success: false,
+                                message: 'Please enter a valid SAML Identity Provider URL first.'
+                            });
+                            break;
+                        }
+
+                        try {
+                            const authResult = await executeSamlLogin(samlUrl, region, (msg) => {
+                                this._panel.webview.postMessage({
+                                    command: 'samlProgress',
+                                    message: msg
+                                });
+                            });
+
+                            this._panel.webview.postMessage({
+                                command: 'samlLoginResult',
+                                success: true,
+                                payload: authResult,
+                                message: `Authenticated as ${authResult.roleArn}! Browser window closed.`
+                            });
+                            vscode.window.showInformationMessage(`SAML login successful! Role: ${authResult.roleArn}`);
+                        } catch (samlErr: any) {
+                            this._panel.webview.postMessage({
+                                command: 'samlLoginResult',
+                                success: false,
+                                message: samlErr.message || 'SAML login failed.'
+                            });
+                            vscode.window.showErrorMessage(`SAML login failed: ${samlErr.message}`);
+                        }
+                        break;
+                    }
                     case 'cancel':
                         this.dispose();
                         break;
@@ -208,7 +246,8 @@ export class ConnectionFormPanel {
                 <option value="default">Default Credential Chain</option>
                 <option value="profile">AWS Profile</option>
                 <option value="accessKeys">Access Key ID & Secret Key</option>
-                <option value="sso">Browser SSO / SAML</option>
+                <option value="saml">Interactive Browser SAML Login (Okta / Azure AD / Ping)</option>
+                <option value="sso">AWS IAM Identity Center (SSO)</option>
             </select>
         </div>
         
@@ -226,6 +265,28 @@ export class ConnectionFormPanel {
                 <label>Secret Access Key</label>
                 <input type="password" id="secretAccessKey" />
             </div>
+        </div>
+
+        <div id="groupSaml" class="hidden">
+            <div class="form-group">
+                <label>SAML Identity Provider URL *</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="samlUrl" placeholder="https://myapps.microsoft.com/... or https://your-idp.okta.com/app/amazon_aws/..." style="flex: 1;" />
+                    <button type="button" id="btnLaunchSaml" class="btn-primary" style="white-space: nowrap;">🔐 Launch Browser Login</button>
+                </div>
+                <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px;">
+                    Opens an automated Edge/Chrome browser window. Complete your login and role selection; the browser will capture credentials and close automatically.
+                </div>
+                <div id="samlStatus" style="font-size: 12px; margin-top: 8px; padding: 8px 12px; border-radius: 4px; display: none; line-height: 1.4;"></div>
+            </div>
+            <div class="form-group">
+                <label>Assumed Role ARN</label>
+                <input type="text" id="samlRoleArn" placeholder="Populated automatically after SAML login" readonly style="opacity: 0.85;" />
+            </div>
+            <input type="hidden" id="samlAccessKeyId" />
+            <input type="hidden" id="samlSecretAccessKey" />
+            <input type="hidden" id="samlSessionToken" />
+            <input type="hidden" id="samlSessionExpiration" />
         </div>
 
         <div id="groupSso" class="hidden">
@@ -305,14 +366,51 @@ export class ConnectionFormPanel {
         const helpOutputLocation = document.getElementById('helpOutputLocation');
         const outputLocationInput = document.getElementById('outputLocation');
 
+        const btnLaunchSaml = document.getElementById('btnLaunchSaml');
+        const samlStatus = document.getElementById('samlStatus');
+
         authSelect.addEventListener('change', updateAuthFields);
         encSelect.addEventListener('change', updateEncFields);
         workgroupInput.addEventListener('input', updateWorkgroupValidation);
+
+        function setSamlStatus(msg, type) {
+            samlStatus.style.display = 'block';
+            samlStatus.textContent = msg;
+            if (type === 'progress') {
+                samlStatus.style.background = 'var(--vscode-badge-background, #0e639c)';
+                samlStatus.style.color = 'var(--vscode-badge-foreground, #fff)';
+            } else if (type === 'success') {
+                samlStatus.style.background = 'var(--vscode-testing-iconPassed, #2ea043)';
+                samlStatus.style.color = '#fff';
+            } else if (type === 'error') {
+                samlStatus.style.background = 'var(--vscode-testing-iconFailed, #f85149)';
+                samlStatus.style.color = '#fff';
+            }
+        }
+
+        btnLaunchSaml.addEventListener('click', () => {
+            const samlUrl = (document.getElementById('samlUrl').value || '').trim();
+            const region = (document.getElementById('region').value || '').trim() || 'us-east-1';
+            if (!samlUrl) {
+                showBanner('Please enter a SAML Identity Provider URL first.', false);
+                return;
+            }
+            hideBanner();
+            btnLaunchSaml.disabled = true;
+            btnLaunchSaml.textContent = '⏳ Waiting for login...';
+            setSamlStatus('Launching Edge/Chrome browser for SAML login...', 'progress');
+            vscode.postMessage({
+                command: 'launchSamlLogin',
+                samlUrl,
+                region
+            });
+        });
 
         function updateAuthFields() {
             const val = authSelect.value;
             document.getElementById('groupProfile').classList.toggle('hidden', val !== 'profile');
             document.getElementById('groupAccessKeys').classList.toggle('hidden', val !== 'accessKeys');
+            document.getElementById('groupSaml').classList.toggle('hidden', val !== 'saml');
             document.getElementById('groupSso').classList.toggle('hidden', val !== 'sso');
         }
 
@@ -343,10 +441,24 @@ export class ConnectionFormPanel {
         }
 
         function gatherFormData() {
+            const authMethod = authSelect.value;
+            let accessKeyId = document.getElementById('accessKeyId').value;
+            let secretAccessKey = document.getElementById('secretAccessKey').value;
+            let sessionToken = undefined;
+            let sessionExpiration = undefined;
+
+            if (authMethod === 'saml') {
+                accessKeyId = document.getElementById('samlAccessKeyId').value || accessKeyId;
+                secretAccessKey = document.getElementById('samlSecretAccessKey').value || secretAccessKey;
+                sessionToken = document.getElementById('samlSessionToken').value || undefined;
+                const expVal = document.getElementById('samlSessionExpiration').value;
+                sessionExpiration = expVal ? parseInt(expVal, 10) : undefined;
+            }
+
             return {
                 id: document.getElementById('connId').value,
                 name: document.getElementById('connectionName').value,
-                authMethod: authSelect.value,
+                authMethod: authMethod,
                 region: document.getElementById('region').value,
                 workgroup: document.getElementById('workgroup').value,
                 catalog: document.getElementById('catalog').value,
@@ -354,8 +466,12 @@ export class ConnectionFormPanel {
                 encryptionType: encSelect.value,
                 kmsKeyArn: document.getElementById('kmsKeyArn').value,
                 profileName: document.getElementById('profileName').value,
-                accessKeyId: document.getElementById('accessKeyId').value,
-                secretAccessKey: document.getElementById('secretAccessKey').value,
+                accessKeyId: accessKeyId,
+                secretAccessKey: secretAccessKey,
+                sessionToken: sessionToken,
+                sessionExpiration: sessionExpiration,
+                samlUrl: document.getElementById('samlUrl').value,
+                samlRoleArn: document.getElementById('samlRoleArn').value,
                 ssoStartUrl: document.getElementById('ssoStartUrl').value,
                 ssoRegion: document.getElementById('ssoRegion').value,
                 ssoAccountId: document.getElementById('ssoAccountId').value,
@@ -372,8 +488,18 @@ export class ConnectionFormPanel {
                 showBanner('AWS Region is mandatory.', false);
                 return false;
             }
+            if (data.authMethod === 'saml') {
+                if (!data.samlUrl || !data.samlUrl.trim()) {
+                    showBanner('SAML Identity Provider URL is mandatory for SAML Login.', false);
+                    return false;
+                }
+                if (!data.accessKeyId || !data.secretAccessKey || !data.sessionToken) {
+                    showBanner('Please complete the browser login by clicking "Launch Browser Login" first.', false);
+                    return false;
+                }
+            }
             if (data.authMethod === 'sso' && (!data.ssoStartUrl || !data.ssoStartUrl.trim())) {
-                showBanner('SAML Identity Provider URL is mandatory for Browser SSO.', false);
+                showBanner('SSO Start URL is mandatory for IAM Identity Center.', false);
                 return false;
             }
             if (data.authMethod === 'accessKeys' && (!data.accessKeyId || !data.secretAccessKey)) {
@@ -437,6 +563,26 @@ export class ConnectionFormPanel {
         window.addEventListener('message', event => {
             const message = event.data;
             switch (message.command) {
+                case 'samlProgress':
+                    setSamlStatus(message.message, 'progress');
+                    break;
+                case 'samlLoginResult':
+                    btnLaunchSaml.disabled = false;
+                    btnLaunchSaml.textContent = '🔐 Launch Browser Login';
+                    if (message.success && message.payload) {
+                        const res = message.payload;
+                        document.getElementById('samlRoleArn').value = res.roleArn || '';
+                        document.getElementById('samlAccessKeyId').value = res.accessKeyId || '';
+                        document.getElementById('samlSecretAccessKey').value = res.secretAccessKey || '';
+                        document.getElementById('samlSessionToken').value = res.sessionToken || '';
+                        document.getElementById('samlSessionExpiration').value = res.sessionExpiration || '';
+                        setSamlStatus('✓ Authenticated successfully! Assumed Role: ' + res.roleArn, 'success');
+                        showBanner('SAML authentication successful! Credentials acquired and browser closed.', true);
+                    } else {
+                        setSamlStatus('✗ ' + (message.message || 'Login failed'), 'error');
+                        showBanner(message.message || 'SAML login failed', false);
+                    }
+                    break;
                 case 'testResult':
                     document.getElementById('btnTest').textContent = 'Test Connection';
                     document.getElementById('btnTest').disabled = false;
@@ -460,6 +606,8 @@ export class ConnectionFormPanel {
                     encSelect.value = config.encryptionType || 'NONE';
                     document.getElementById('kmsKeyArn').value = config.kmsKeyArn || '';
                     document.getElementById('profileName').value = config.profileName || '';
+                    document.getElementById('samlUrl').value = config.samlUrl || '';
+                    document.getElementById('samlRoleArn').value = config.samlRoleArn || '';
                     document.getElementById('ssoStartUrl').value = config.ssoStartUrl || '';
                     document.getElementById('ssoRegion').value = config.ssoRegion || '';
                     document.getElementById('ssoAccountId').value = config.ssoAccountId || '';
@@ -467,6 +615,19 @@ export class ConnectionFormPanel {
                     
                     document.getElementById('accessKeyId').value = secrets.accessKeyId || '';
                     document.getElementById('secretAccessKey').value = secrets.secretAccessKey || '';
+                    document.getElementById('samlAccessKeyId').value = secrets.accessKeyId || '';
+                    document.getElementById('samlSecretAccessKey').value = secrets.secretAccessKey || '';
+                    document.getElementById('samlSessionToken').value = secrets.sessionToken || '';
+                    document.getElementById('samlSessionExpiration').value = secrets.sessionExpiration || '';
+
+                    if (config.authMethod === 'saml' && secrets.sessionExpiration) {
+                        const expDate = new Date(secrets.sessionExpiration);
+                        if (expDate.getTime() > Date.now()) {
+                            setSamlStatus('✓ Valid session until ' + expDate.toLocaleTimeString(), 'success');
+                        } else {
+                            setSamlStatus('⚠ Session expired. Please click Launch Browser Login to refresh.', 'error');
+                        }
+                    }
                     
                     updateAuthFields();
                     updateEncFields();
