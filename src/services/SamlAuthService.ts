@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import puppeteer from 'puppeteer-core';
+import puppeteer, { Browser, HTTPRequest } from 'puppeteer-core';
 import { STSClient, AssumeRoleWithSAMLCommand } from '@aws-sdk/client-sts';
 
 export interface SamlRoleOption {
@@ -22,8 +22,9 @@ export interface SamlAuthResult {
 
 /**
  * Searches the local machine for installed Chrome or Microsoft Edge executables.
+ * Returns a list of all existing browser executable paths, prioritizing Google Chrome for CDP stability.
  */
-export function findSystemBrowser(): string | undefined {
+export function findSystemBrowsers(): string[] {
   const candidates: string[] = [];
 
   if (process.platform === 'win32') {
@@ -32,33 +33,116 @@ export function findSystemBrowser(): string | undefined {
     const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
 
     candidates.push(
-      path.join(programFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-      path.join(programFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
       path.join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
       path.join(programFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-      path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-      path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe')
+      path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      path.join(programFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      path.join(programFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe')
     );
   } else if (process.platform === 'darwin') {
     candidates.push(
-      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'
     );
   } else {
     candidates.push(
       '/usr/bin/google-chrome',
-      '/usr/bin/microsoft-edge',
+      '/usr/bin/google-chrome-stable',
       '/usr/bin/chromium',
-      '/usr/bin/chromium-browser'
+      '/usr/bin/chromium-browser',
+      '/usr/bin/microsoft-edge',
+      '/usr/bin/microsoft-edge-stable'
     );
   }
 
+  const existing: string[] = [];
   for (const p of candidates) {
-    if (p && fs.existsSync(p)) {
-      return p;
+    if (p && fs.existsSync(p) && !existing.includes(p)) {
+      existing.push(p);
     }
   }
-  return undefined;
+  return existing;
+}
+
+export function findSystemBrowser(): string | undefined {
+  const browsers = findSystemBrowsers();
+  return browsers.length > 0 ? browsers[0] : undefined;
+}
+
+/**
+ * Launches an installed browser with fallback across all detected executables,
+ * sanitizing environment variables to prevent Electron/VS Code conflicts.
+ */
+async function launchBrowserInstance(
+  onProgress?: (message: string) => void
+): Promise<{ browser: Browser; tempProfileDir: string; browserPath: string }> {
+  const browsers = findSystemBrowsers();
+  if (browsers.length === 0) {
+    throw new Error('No compatible browser (Google Chrome or Microsoft Edge) found on your system.');
+  }
+
+  // Sanitize environment variables so Electron/VS Code specifics (e.g. ELECTRON_RUN_AS_NODE)
+  // are not leaked into the spawned browser process.
+  const cleanEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (
+      v !== undefined &&
+      !k.startsWith('ELECTRON_') &&
+      !k.startsWith('VSCODE_') &&
+      k !== 'NODE_OPTIONS' &&
+      k !== 'CHROME_CRASHPAD_PIPE_NAME' &&
+      k !== 'ORIGINAL_XDG_CURRENT_DESKTOP'
+    ) {
+      cleanEnv[k] = v;
+    }
+  }
+
+  const launchErrors: string[] = [];
+
+  for (const browserPath of browsers) {
+    const isChrome = path.basename(browserPath).toLowerCase().includes('chrome');
+    const browserName = isChrome ? 'Google Chrome' : 'Microsoft Edge';
+    const tempProfileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'athena-saml-'));
+
+    try {
+      if (onProgress) {
+        onProgress(`Launching ${browserName} for SAML login...`);
+      }
+
+      const browser = await puppeteer.launch({
+        executablePath: browserPath,
+        headless: false,
+        userDataDir: tempProfileDir,
+        defaultViewport: null,
+        dumpio: false,
+        env: cleanEnv,
+        ignoreDefaultArgs: ['--enable-automation'],
+        args: [
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-gpu',
+          '--disable-dev-shm-usage',
+          '--disable-background-networking',
+          '--disable-background-mode',
+          '--disable-features=msEdgeStartupBoost',
+          '--window-size=1050,850'
+        ]
+      });
+
+      return { browser, tempProfileDir, browserPath };
+    } catch (err: any) {
+      launchErrors.push(`${browserName} (${browserPath}): ${err.message}`);
+      try {
+        fs.rmSync(tempProfileDir, { recursive: true, force: true });
+      } catch {}
+      // If there are other browsers available, try the next one in the list
+    }
+  }
+
+  throw new Error(`Failed to launch browser. Attempts:\n${launchErrors.join('\n')}`);
 }
 
 /**
@@ -93,7 +177,7 @@ export function parseRolesFromSaml(samlBase64: string): SamlRoleOption[] {
 
 /**
  * Executes an interactive browser SAML login:
- * 1. Launches local Edge/Chrome in a dedicated visible window.
+ * 1. Launches local Chrome/Edge in a dedicated visible window.
  * 2. Navigates to the user's corporate SAML IdP URL.
  * 3. Listens for the SAML assertion POST to signin.aws.amazon.com/saml.
  * 4. Captures the chosen role (or auto-selects if only one role is present).
@@ -105,28 +189,7 @@ export async function executeSamlLogin(
   region: string = 'us-east-1',
   onProgress?: (message: string) => void
 ): Promise<SamlAuthResult> {
-  const browserPath = findSystemBrowser();
-  if (!browserPath) {
-    throw new Error('No compatible browser (Microsoft Edge or Google Chrome) found on your system.');
-  }
-
-  const tempProfileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'athena-saml-'));
-
-  if (onProgress) {
-    onProgress('Launching browser for SAML authentication...');
-  }
-
-  const browser = await puppeteer.launch({
-    executablePath: browserPath,
-    headless: false,
-    userDataDir: tempProfileDir,
-    defaultViewport: null,
-    args: [
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--window-size=1050,850'
-    ]
-  });
+  const { browser, tempProfileDir } = await launchBrowserInstance(onProgress);
 
   return new Promise<SamlAuthResult>(async (resolve, reject) => {
     let resolved = false;
@@ -213,7 +276,7 @@ export async function executeSamlLogin(
       const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
       // Intercept network requests
-      page.on('request', async req => {
+      page.on('request', async (req: HTTPRequest) => {
         if (resolved) return;
 
         const url = req.url();
