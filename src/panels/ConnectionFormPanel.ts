@@ -36,6 +36,7 @@ export class ConnectionFormPanel {
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
+                retainContextWhenHidden: true,
                 localResourceRoots: [extensionUri]
             }
         );

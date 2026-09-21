@@ -6,6 +6,7 @@ import { RESULT_PAGE_SIZE } from '../utils/constants';
 export class ResultsPanel {
     private static _counter = 0;
     private readonly _panel: vscode.WebviewPanel;
+    private readonly _result: QueryResult;
     private _disposables: vscode.Disposable[] = [];
 
     public static async create(extensionUri: vscode.Uri, result: QueryResult): Promise<ResultsPanel> {
@@ -23,18 +24,33 @@ export class ResultsPanel {
             vscode.ViewColumn.Two,
             {
                 enableScripts: true,
+                retainContextWhenHidden: true,
                 localResourceRoots: [extensionUri]
             }
         );
 
-        const resultsPanel = new ResultsPanel(panel);
-        resultsPanel._init(result);
+        const resultsPanel = new ResultsPanel(panel, result);
+        resultsPanel._init();
         return resultsPanel;
     }
 
-    private constructor(panel: vscode.WebviewPanel) {
+    private constructor(panel: vscode.WebviewPanel, result: QueryResult) {
         this._panel = panel;
+        this._result = result;
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+        this._panel.onDidChangeViewState(
+            e => {
+                if (e.webviewPanel.visible) {
+                    this._panel.webview.postMessage({
+                        command: 'setData',
+                        columns: this._result.columns,
+                        rows: this._result.rows
+                    });
+                }
+            },
+            null,
+            this._disposables
+        );
         this._panel.webview.onDidReceiveMessage(
             async message => {
                 switch (message.command) {
@@ -51,9 +67,9 @@ export class ResultsPanel {
         );
     }
 
-    private _init(result: QueryResult) {
-        this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, result);
-        this._panel.webview.postMessage({ command: 'setData', columns: result.columns, rows: result.rows });
+    private _init() {
+        this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, this._result);
+        this._panel.webview.postMessage({ command: 'setData', columns: this._result.columns, rows: this._result.rows });
     }
 
     private async _exportData(data: string, type: 'csv' | 'json') {
@@ -130,16 +146,25 @@ export class ResultsPanel {
 
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
-        let allRows = [];
-        let columns = [];
+        const initialData = ${JSON.stringify({ columns: result.columns, rows: result.rows }).replace(/</g, '\\u003c')};
+        const previousState = vscode.getState();
+        let columns = (previousState && previousState.columns) ? previousState.columns : (initialData.columns || []);
+        let allRows = (previousState && previousState.rows) ? previousState.rows : (initialData.rows || []);
         const pageSize = ${RESULT_PAGE_SIZE};
-        let currentPage = 0;
+        let currentPage = (previousState && typeof previousState.currentPage === 'number') ? previousState.currentPage : 0;
+
+        function saveState() {
+            vscode.setState({ columns, rows: allRows, currentPage });
+        }
+
+        saveState();
 
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.command === 'setData') {
-                columns = message.columns;
-                allRows = message.rows;
+                columns = message.columns || [];
+                allRows = message.rows || [];
+                saveState();
                 renderTable();
             }
         });
@@ -174,7 +199,8 @@ export class ResultsPanel {
                 tbody.appendChild(tr);
             }
 
-            document.getElementById('pageInfo').textContent = 'Page ' + (currentPage + 1) + ' of ' + Math.max(1, Math.ceil(allRows.length / pageSize));
+            const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
+            document.getElementById('pageInfo').textContent = 'Page ' + (currentPage + 1) + ' of ' + totalPages;
             document.getElementById('btnPrev').disabled = currentPage === 0;
             document.getElementById('btnNext').disabled = end >= allRows.length;
         }
@@ -182,6 +208,7 @@ export class ResultsPanel {
         document.getElementById('btnPrev').addEventListener('click', () => {
             if (currentPage > 0) {
                 currentPage--;
+                saveState();
                 renderTable();
             }
         });
@@ -189,9 +216,13 @@ export class ResultsPanel {
         document.getElementById('btnNext').addEventListener('click', () => {
             if ((currentPage + 1) * pageSize < allRows.length) {
                 currentPage++;
+                saveState();
                 renderTable();
             }
         });
+
+        // Initial render on load
+        renderTable();
 
         function generateCsv() {
             const header = columns.map(c => '"' + c.name.replace(/"/g, '""') + '"').join(',');
