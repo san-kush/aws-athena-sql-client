@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-09-21
+
+### Added
+- **Automated Interactive Browser SAML Login (Okta / Azure AD / Ping)**:
+  - Added dedicated SAML authentication flow requiring only the corporate Identity Provider URL.
+  - Automatically launches your system's existing Microsoft Edge or Google Chrome browser (via lightweight `puppeteer-core`, without any bulky Chromium downloads).
+  - Automates network interception of the SAML assertion and role selection, assumes role via AWS STS `AssumeRoleWithSAMLCommand`, and **automatically closes the browser window**.
+  - Temporary STS credentials and session token are securely stored in VS Code's encrypted secrets store.
+  - Automatically detects expired SAML sessions on connection and prompts for seamless 1-click re-authentication.
+
+### Fixed
+- **Table DDL First Line Missing**: Fixed an issue where the `CREATE TABLE` / `CREATE EXTERNAL TABLE` statement line was omitted when executing "Show DDL" on tables.
+- **View DDL Decoding**: Corrected view DDL generation by decoding Athena & Glue Data Catalog Presto/Trino view definitions from `ViewOriginalText`.
+- **Query Result Set Vanishing on Tab Switch**: Fixed result tables disappearing when switching between query result tabs by enabling `retainContextWhenHidden` and integrating VS Code state persistence (`vscode.getState()` / `vscode.setState()`).
+
+### Documentation & Maintenance
+- Added high-resolution feature screenshots in `README.md`.
+- Added Support & Feedback section linking to GitHub Issues.
+- Streamlined documentation for Marketplace consumers.
+
+---
+
 ## [0.1.0] - 2026-09-21
 
 ### Added
@@ -36,5 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.1.1]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.1
 [0.1.0]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.0
 

@@ -2,7 +2,7 @@
   "name": "aws-athena-sql-client",
   "displayName": "AWS Athena SQL Client",
   "description": "Lightweight VS Code extension for Amazon Athena — query execution, Glue catalog browsing, connection management with SSO/IAM support, query history, and saved queries.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "sankush",
   "license": "MIT",
   "repository": {

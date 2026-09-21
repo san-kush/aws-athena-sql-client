@@ -73,7 +73,8 @@ A lightweight, production-ready Visual Studio Code extension for **Amazon Athena
   - **Default Credential Chain**: Standard AWS SDK provider chain (environment variables, IAM roles, ECS/EC2 metadata).
   - **AWS Profile**: Use local profiles configured in `~/.aws/credentials` and `~/.aws/config`.
   - **Access Key ID & Secret Key**: Securely stored using VS Code `SecretStorage` with OS-level keychain encryption.
-  - **Browser SSO / SAML**: One-click **"Open in Browser"** to authenticate via your organization's SAML/SSO Identity Provider URL without headless dependencies.
+  - **Interactive Browser SAML Login**: Automated login for Okta, Azure AD / Entra ID, Ping Identity, etc. Launches your system browser (Edge/Chrome), intercepts role selection, acquires STS credentials, and auto-closes the browser window.
+  - **AWS IAM Identity Center (SSO)**: Direct authentication via AWS SSO Start URL and AWS IAM Identity Center.
 
 ![Authentication Methods](media/screenshots/auth-methods.png)
 

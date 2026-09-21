@@ -4,6 +4,35 @@ Welcome to the release notes for **AWS Athena SQL Client**. Each release include
 
 ---
 
+## Version 0.1.1
+
+**Release Date:** September 21, 2026  
+**Artifact Package:** `aws-athena-sql-client-0.1.1.vsix`
+
+### 📦 Download Artifact
+- **[Download VSIX Artifact (v0.1.1)](https://github.com/san-kush/aws-athena-sql-client/releases/download/v0.1.1/aws-athena-sql-client-0.1.1.vsix)**
+- **File Name:** `aws-athena-sql-client-0.1.1.vsix`
+- **Release Tag:** [`v0.1.1`](https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.1)
+
+---
+
+### Highlights & Key Features
+
+#### 1. Automated Interactive SAML Browser Login (Edge / Chrome)
+- **Zero-Friction Authentication**: Authenticate with enterprise Identity Providers (Okta, Azure AD / Microsoft Entra ID, Ping Identity, Google Workspace, Keycloak) simply by supplying your corporate SAML IdP URL.
+- **Automated Browser Automation**: Launches an isolated browser window via your existing system **Microsoft Edge** or **Google Chrome** using lightweight `puppeteer-core` (no bulky Chromium download).
+- **Auto-Capture & Auto-Close**: Select your IAM role on the AWS SAML page, and the extension captures the SAML assertion, assumes the IAM role via AWS STS `AssumeRoleWithSAMLCommand`, and **automatically closes the browser window**.
+- **Session Expiration Guard**: Automatically detects expired temporary credentials and provides a 1-click re-authentication prompt.
+
+#### 2. DDL & Metadata Corrections
+- **Table DDL First Line Preserved**: Fixed an issue where `rawRows[0]` was being skipped, ensuring the initial `CREATE TABLE` / `CREATE EXTERNAL TABLE` line is always included.
+- **Presto/Trino View Decoding**: Accurately decodes and formats Presto/Trino view definitions (`/* Presto View: ... */`) stored in AWS Glue Data Catalog into clean `CREATE OR REPLACE VIEW` statements.
+
+#### 3. Persistent Multi-Tab Results
+- **Prevent Dataset Vanishing**: Enabled Webview context retention and native VS Code state persistence so query results remain preserved when switching between multiple query tabs.
+
+---
+
 ## Version 0.1.0 (Initial Release)
 
 **Release Date:** September 21, 2026  
