@@ -4,6 +4,36 @@ Welcome to the release notes for **AWS Athena SQL Client**. Each release include
 
 ---
 
+## Version 0.1.2
+
+**Release Date:** September 21, 2026  
+**Artifact Package:** `aws-athena-sql-client-0.1.2.vsix`
+
+### 📦 Download Artifact
+- **[Download VSIX Artifact (v0.1.2)](https://github.com/san-kush/aws-athena-sql-client/releases/download/v0.1.2/aws-athena-sql-client-0.1.2.vsix)**
+- **File Name:** `aws-athena-sql-client-0.1.2.vsix`
+- **Release Tag:** [`v0.1.2`](https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.2)
+
+---
+
+### Highlights & Key Features
+
+#### 1. Interactive Column Header Sorting in Query Results
+- **Tri-State Column Sorting**: Click any column header in the query results table to cycle through **Ascending (▲)**, **Descending (▼)**, and **Original order**.
+- **Intelligent Type-Aware Comparison**: Automatically handles numbers numerically, natural strings (`localeCompare`), and sorts null/empty values cleanly to the end.
+- **Dataset-Wide & Persistent**: Sorting applies across the complete dataset (not just the active page), automatically resets pagination to page 1, persists across tab switching (`retainContextWhenHidden` + `vscode.setState`), and carries through to CSV and JSON exports.
+
+#### 2. Browser Process Launch Reliability Fix (`Code: 0`)
+- **Environment Sanitization**: Fully sanitized the execution environment passed to spawned browser instances. Prevents leaked VS Code / Electron variables (`ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS`, `VSCODE_*`) from corrupting browser child processes.
+- **Edge Startup Boost & Singleton Handover Prevention**: Added flags (`--disable-features=msEdgeStartupBoost`, `--disable-background-mode`, `--disable-background-networking`, `--no-sandbox`, `--disable-gpu`) preventing background Microsoft Edge processes from seizing the instance and exiting immediately.
+- **Stealth Automation**: Added `ignoreDefaultArgs: ['--enable-automation']` to ensure standard user browser behavior, bypassing enterprise IdP automation blocks.
+- **Chrome & Edge Multi-Browser Fallback**: Prioritizes Google Chrome for CDP stability and automatically falls back to Microsoft Edge if needed.
+
+#### 3. Leaner Production Artifact
+- Excluded test and scratch scripts from the `.vsix` bundle via `.vscodeignore`.
+
+---
+
 ## Version 0.1.1
 
 **Release Date:** September 21, 2026  

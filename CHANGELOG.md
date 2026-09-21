@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.2] - 2026-09-21
+
+### Added
+- **Interactive Column Header Sorting in Query Results**:
+  - Click any column header in the query results table to cycle through **Ascending (▲)**, **Descending (▼)**, and **Original order**.
+  - Intelligent type-aware comparison supporting numeric sorting, natural text sorting (`localeCompare`), and null-safe ordering.
+  - Sorting applies across the entire dataset with automatic page-1 reset, state persistence across tab switches, and preserved ordering on CSV/JSON export.
+
+### Fixed
+- **Browser Launch Reliability (Code: 0 Fix)**:
+  - Fixed `Failed to launch the browser process: Code: 0` error by completely sanitizing environment variables (`ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS`, `VSCODE_*`) passed from the VS Code Extension Host to the spawned browser process.
+  - Added flags to prevent Microsoft Edge background process singleton handover and Startup Boost interference (`--disable-features=msEdgeStartupBoost`, `--disable-background-mode`, `--disable-background-networking`, `--no-sandbox`, `--disable-gpu`).
+  - Added `ignoreDefaultArgs: ['--enable-automation']` so automated test bars do not trigger corporate IdP security blocks.
+  - Added multi-browser automatic fallback: prioritizes Google Chrome and automatically falls back to Microsoft Edge if needed.
+- **Packaging Optimization**:
+  - Excluded development and scratch scripts from the distributed `.vsix` package to keep artifact size lean.
+
+---
+
 ## [0.1.1] - 2026-09-21
 
 ### Added
@@ -58,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.1.2]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.2
 [0.1.1]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.1
 [0.1.0]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.0
 

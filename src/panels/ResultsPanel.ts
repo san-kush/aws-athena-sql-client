@@ -111,7 +111,9 @@ export class ResultsPanel {
         button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: 1px solid var(--vscode-button-border, transparent); padding: 4px 8px; border-radius: 2px; cursor: pointer; font-size: 12px; }
         button:hover { background: var(--vscode-button-secondaryHoverBackground); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { background: var(--vscode-editor-lineHighlightBackground); color: var(--vscode-foreground); padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--vscode-panel-border); position: sticky; top: 0; font-weight: 600; }
+        th { background: var(--vscode-editor-lineHighlightBackground); color: var(--vscode-foreground); padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--vscode-panel-border); position: sticky; top: 0; font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap; }
+        th:hover { background: var(--vscode-list-hoverBackground); }
+        .sort-icon { display: inline-block; margin-left: 6px; font-size: 11px; color: var(--vscode-textLink-foreground, #3794ff); }
         td { padding: 6px 12px; border-bottom: 1px solid var(--vscode-panel-border); color: var(--vscode-foreground); }
         tr:hover td { background: var(--vscode-list-hoverBackground); }
         .null-val { color: var(--vscode-descriptionForeground); font-style: italic; }
@@ -149,12 +151,62 @@ export class ResultsPanel {
         const initialData = ${JSON.stringify({ columns: result.columns, rows: result.rows }).replace(/</g, '\\u003c')};
         const previousState = vscode.getState();
         let columns = (previousState && previousState.columns) ? previousState.columns : (initialData.columns || []);
-        let allRows = (previousState && previousState.rows) ? previousState.rows : (initialData.rows || []);
+        let originalRows = (previousState && previousState.originalRows) ? previousState.originalRows : (initialData.rows || []);
+        let allRows = (previousState && previousState.allRows) ? previousState.allRows : [...originalRows];
+        let sortColumnIndex = (previousState && typeof previousState.sortColumnIndex === 'number') ? previousState.sortColumnIndex : null;
+        let sortDirection = (previousState && previousState.sortDirection) ? previousState.sortDirection : null;
         const pageSize = ${RESULT_PAGE_SIZE};
         let currentPage = (previousState && typeof previousState.currentPage === 'number') ? previousState.currentPage : 0;
 
         function saveState() {
-            vscode.setState({ columns, rows: allRows, currentPage });
+            vscode.setState({
+                columns,
+                originalRows,
+                allRows,
+                currentPage,
+                sortColumnIndex,
+                sortDirection
+            });
+        }
+
+        function compareValues(a, b) {
+            const isANull = a === null || a === undefined || a === '';
+            const isBNull = b === null || b === undefined || b === '';
+            if (isANull && isBNull) return 0;
+            if (isANull) return 1;
+            if (isBNull) return -1;
+
+            const strA = String(a).trim();
+            const strB = String(b).trim();
+
+            const numA = Number(strA);
+            const numB = Number(strB);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return numA - numB;
+            }
+
+            return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        function applySort() {
+            if (sortColumnIndex === null || sortDirection === null) {
+                allRows = [...originalRows];
+                return;
+            }
+
+            const colIdx = sortColumnIndex;
+            const dir = sortDirection;
+
+            allRows = [...originalRows].sort((rowA, rowB) => {
+                const valA = rowA[colIdx];
+                const valB = rowB[colIdx];
+                const cmp = compareValues(valA, valB);
+                return dir === 'asc' ? cmp : -cmp;
+            });
+        }
+
+        if (sortColumnIndex !== null && sortDirection !== null) {
+            applySort();
         }
 
         saveState();
@@ -163,7 +215,8 @@ export class ResultsPanel {
             const message = event.data;
             if (message.command === 'setData') {
                 columns = message.columns || [];
-                allRows = message.rows || [];
+                originalRows = message.rows || [];
+                applySort();
                 saveState();
                 renderTable();
             }
@@ -172,9 +225,40 @@ export class ResultsPanel {
         function renderTable() {
             const theadRow = document.getElementById('theadRow');
             theadRow.innerHTML = '';
-            for (const col of columns) {
+            for (let i = 0; i < columns.length; i++) {
+                const col = columns[i];
                 const th = document.createElement('th');
-                th.textContent = col.name;
+                th.title = 'Click to sort by ' + col.name;
+
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = col.name;
+                th.appendChild(nameSpan);
+
+                if (sortColumnIndex === i) {
+                    const icon = document.createElement('span');
+                    icon.className = 'sort-icon';
+                    icon.textContent = sortDirection === 'asc' ? ' ▲' : ' ▼';
+                    th.appendChild(icon);
+                }
+
+                th.addEventListener('click', () => {
+                    if (sortColumnIndex === i) {
+                        if (sortDirection === 'asc') {
+                            sortDirection = 'desc';
+                        } else if (sortDirection === 'desc') {
+                            sortDirection = null;
+                            sortColumnIndex = null;
+                        }
+                    } else {
+                        sortColumnIndex = i;
+                        sortDirection = 'asc';
+                    }
+                    currentPage = 0;
+                    applySort();
+                    saveState();
+                    renderTable();
+                });
+
                 theadRow.appendChild(th);
             }
 
