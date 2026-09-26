@@ -136,17 +136,6 @@ export class ConnectionFormPanel {
                         }
                         break;
                     }
-                    case 'openBrowser': {
-                        try {
-                            if (message.url) {
-                                await vscode.env.openExternal(vscode.Uri.parse(message.url));
-                                vscode.window.showInformationMessage(`Opening browser for SSO authentication: ${message.url}`);
-                            }
-                        } catch (e: any) {
-                            vscode.window.showErrorMessage(`Failed to open browser: ${e.message}`);
-                        }
-                        break;
-                    }
                     case 'launchSamlLogin': {
                         const samlUrl = (message.samlUrl || '').trim();
                         const region = (message.region || 'us-east-1').trim();
@@ -291,13 +280,10 @@ export class ConnectionFormPanel {
 
         <div id="groupSso" class="hidden">
             <div class="form-group">
-                <label>SAML Identity Provider URL *</label>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" id="ssoStartUrl" placeholder="https://..." style="flex: 1;" />
-                    <button type="button" id="btnOpenBrowser" class="btn-secondary" style="white-space: nowrap;">Open in Browser</button>
-                </div>
+                <label>SSO Start URL *</label>
+                <input type="text" id="ssoStartUrl" placeholder="https://my-sso-portal.awsapps.com/start" />
                 <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 4px;">
-                    Opens login in your system's default browser (macOS/Windows). No extra tools required.
+                    Your AWS IAM Identity Center start URL.
                 </div>
             </div>
             <div class="form-group">
@@ -370,10 +356,14 @@ export class ConnectionFormPanel {
         const samlStatus = document.getElementById('samlStatus');
 
         authSelect.addEventListener('change', updateAuthFields);
+        authSelect.addEventListener('input', updateAuthFields);
         encSelect.addEventListener('change', updateEncFields);
+        encSelect.addEventListener('input', updateEncFields);
         workgroupInput.addEventListener('input', updateWorkgroupValidation);
+        workgroupInput.addEventListener('change', updateWorkgroupValidation);
 
         function setSamlStatus(msg, type) {
+            if (!samlStatus) return;
             samlStatus.style.display = 'block';
             samlStatus.textContent = msg;
             if (type === 'progress') {
@@ -388,30 +378,36 @@ export class ConnectionFormPanel {
             }
         }
 
-        btnLaunchSaml.addEventListener('click', () => {
-            const samlUrl = (document.getElementById('samlUrl').value || '').trim();
-            const region = (document.getElementById('region').value || '').trim() || 'us-east-1';
-            if (!samlUrl) {
-                showBanner('Please enter a SAML Identity Provider URL first.', false);
-                return;
-            }
-            hideBanner();
-            btnLaunchSaml.disabled = true;
-            btnLaunchSaml.textContent = '⏳ Waiting for login...';
-            setSamlStatus('Launching Edge/Chrome browser for SAML login...', 'progress');
-            vscode.postMessage({
-                command: 'launchSamlLogin',
-                samlUrl,
-                region
+        if (btnLaunchSaml) {
+            btnLaunchSaml.addEventListener('click', () => {
+                const samlUrl = (document.getElementById('samlUrl').value || '').trim();
+                const region = (document.getElementById('region').value || '').trim() || 'us-east-1';
+                if (!samlUrl) {
+                    showBanner('Please enter a SAML Identity Provider URL first.', false);
+                    return;
+                }
+                hideBanner();
+                btnLaunchSaml.disabled = true;
+                btnLaunchSaml.textContent = '⏳ Waiting for login...';
+                setSamlStatus('Launching Edge/Chrome browser for SAML login...', 'progress');
+                vscode.postMessage({
+                    command: 'launchSamlLogin',
+                    samlUrl,
+                    region
+                });
             });
-        });
+        }
 
         function updateAuthFields() {
-            const val = authSelect.value;
-            document.getElementById('groupProfile').classList.toggle('hidden', val !== 'profile');
-            document.getElementById('groupAccessKeys').classList.toggle('hidden', val !== 'accessKeys');
-            document.getElementById('groupSaml').classList.toggle('hidden', val !== 'saml');
-            document.getElementById('groupSso').classList.toggle('hidden', val !== 'sso');
+            const val = authSelect ? authSelect.value : 'default';
+            const grpProfile = document.getElementById('groupProfile');
+            const grpAccessKeys = document.getElementById('groupAccessKeys');
+            const grpSaml = document.getElementById('groupSaml');
+            const grpSso = document.getElementById('groupSso');
+            if (grpProfile) grpProfile.classList.toggle('hidden', val !== 'profile');
+            if (grpAccessKeys) grpAccessKeys.classList.toggle('hidden', val !== 'accessKeys');
+            if (grpSaml) grpSaml.classList.toggle('hidden', val !== 'saml');
+            if (grpSso) grpSso.classList.toggle('hidden', val !== 'sso');
         }
 
         function updateEncFields() {
@@ -528,14 +524,6 @@ export class ConnectionFormPanel {
             return true;
         }
 
-        document.getElementById('btnOpenBrowser').addEventListener('click', () => {
-            const url = document.getElementById('ssoStartUrl').value.trim();
-            if (!url) {
-                showBanner('Please enter a SAML Identity Provider URL first.', false);
-                return;
-            }
-            vscode.postMessage({ command: 'openBrowser', url });
-        });
 
         document.getElementById('btnTest').addEventListener('click', () => {
             const data = gatherFormData();

@@ -20,12 +20,16 @@ import {
   GetTablesCommand,
   GetTableCommand
 } from '@aws-sdk/client-glue';
+import * as vscode from 'vscode';
 import { fromIni, fromSSO } from '@aws-sdk/credential-providers';
 import type { AwsCredentialIdentityProvider } from '@aws-sdk/types';
-// 'open' v10+ is ESM-only; use dynamic import for CJS compat
+
 async function openUrl(url: string): Promise<void> {
-  const { default: open } = await import('open');
-  await open(url);
+  let target = (url || '').trim();
+  if (!/^https?:\/\//i.test(target)) {
+    target = 'https://' + target;
+  }
+  await vscode.env.openExternal(vscode.Uri.parse(target));
 }
 import type { ConnectionConfig, ConnectionSecrets, QueryResult, QueryHistoryEntry, SavedQuery, ColumnInfo, QueryStatus } from '../models/types';
 import { DEFAULT_CATALOG, POLL_INTERVALS } from '../utils/constants';
