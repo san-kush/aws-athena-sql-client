@@ -275,13 +275,29 @@ export async function executeSamlLogin(
       const pages = await browser.pages();
       const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
-      // Intercept network requests
+      // Enable request interception so we can read POST body data.
+      // In puppeteer-core v25+, postData() returns null without this.
+      await page.setRequestInterception(true);
+
+      // Intercept network requests — MUST call request.continue() on every
+      // request or the browser will hang (blank page) waiting for a response.
       page.on('request', async (req: HTTPRequest) => {
-        if (resolved) return;
+        if (resolved) {
+          try { await req.continue(); } catch {}
+          return;
+        }
 
         const url = req.url();
         if (url.includes('signin.aws.amazon.com/saml') && req.method() === 'POST') {
-          const postData = req.postData();
+          // Read POST body: try postData() first, fall back to fetchPostData()
+          // for large payloads that aren't buffered inline.
+          let postData = req.postData();
+          if (!postData && req.hasPostData()) {
+            try {
+              postData = await req.fetchPostData() ?? undefined;
+            } catch {}
+          }
+
           if (postData) {
             const params = new URLSearchParams(postData);
             const saml = params.get('SAMLResponse');
@@ -291,6 +307,7 @@ export async function executeSamlLogin(
 
               // If only one role exists, assume immediately
               if (availableRoles.length === 1) {
+                try { await req.continue(); } catch {}
                 await assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, saml);
                 return;
               }
@@ -304,30 +321,37 @@ export async function executeSamlLogin(
                 : roleIndex;
               const matched = availableRoles.find(r => r.roleArn === selectedRoleArn || r.roleArn.endsWith(`/${selectedRoleArn}`));
               if (matched) {
+                try { await req.continue(); } catch {}
                 await assumeRole(matched.roleArn, matched.principalArn, capturedSaml);
                 return;
               } else if (availableRoles.length > 0) {
                 const idx = parseInt(roleIndex, 10);
                 if (!isNaN(idx) && availableRoles[idx]) {
+                  try { await req.continue(); } catch {}
                   await assumeRole(availableRoles[idx].roleArn, availableRoles[idx].principalArn, capturedSaml);
                   return;
                 } else if (!isNaN(idx) && availableRoles[idx - 1]) {
+                  try { await req.continue(); } catch {}
                   await assumeRole(availableRoles[idx - 1].roleArn, availableRoles[idx - 1].principalArn, capturedSaml);
                   return;
                 }
+                try { await req.continue(); } catch {}
                 await assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, capturedSaml);
                 return;
               }
             }
           }
         }
+
+        // Allow the request to proceed — critical for page navigation to work
+        try { await req.continue(); } catch {}
       });
 
       if (onProgress) {
         onProgress('Navigating to SAML login URL...');
       }
 
-      await page.goto(samlUrl, { waitUntil: 'domcontentloaded' });
+      await page.goto(samlUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     } catch (err: any) {
       if (!resolved) {
         resolved = true;
