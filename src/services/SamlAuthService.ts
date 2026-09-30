@@ -115,6 +115,7 @@ async function launchBrowserInstance(
       }
 
       const args = [
+        `--app=${targetUrl}`,
         '--window-size=1050,850',
         '--no-first-run',
         '--no-default-browser-check',
@@ -220,6 +221,8 @@ export async function executeSamlLogin(
     let settled = false; // tracks whether resolve/reject has actually been called
     let capturedSaml: string | undefined;
     let availableRoles: SamlRoleOption[] = [];
+    let selectedRoleArn: string | undefined;
+    let pollTimer: NodeJS.Timeout | null = null;
 
     const log = (msg: string) => {
       if (onProgress) { onProgress(msg); }
@@ -242,6 +245,10 @@ export async function executeSamlLogin(
 
     // Cleanup helper
     const cleanup = async () => {
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
       try {
         log('Cleanup: closing browser...');
         await browser.close();
@@ -256,6 +263,10 @@ export async function executeSamlLogin(
 
     // If user closes browser window manually before completion
     browser.on('disconnected', () => {
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
       log(`Browser disconnected event — resolved=${resolved}, settled=${settled}`);
       if (!resolved) {
         resolved = true;
@@ -275,6 +286,10 @@ export async function executeSamlLogin(
     const timeoutTimer = setTimeout(async () => {
       if (!resolved) {
         resolved = true;
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
         await cleanup();
         safeReject(new Error('SAML login timed out after 5 minutes.'));
       }
@@ -283,6 +298,10 @@ export async function executeSamlLogin(
     const assumeRole = async (roleArn: string, principalArn: string, samlAssertion: string) => {
       if (resolved) { log(`assumeRole skipped — already resolved (settled=${settled})`); return; }
       resolved = true;
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
       clearTimeout(timeoutTimer);
 
       log(`assumeRole called: role=${roleArn}, principal=${principalArn}, assertionLen=${samlAssertion.length}`);
@@ -327,197 +346,179 @@ export async function executeSamlLogin(
     };
 
     try {
-      const pages = await browser.pages();
-      const page = pages.length > 0 ? pages[0] : await browser.newPage();
+      // Channel 1: Native Puppeteer request listener (zero CDP overhead, 100% reliable)
+      // Captures SAML assertion on IdP -> AWS POST, and captures chosen role on AWS SAML submit
+      const attachedPages = new WeakSet();
+      const attachPageListeners = (p: any) => {
+        if (attachedPages.has(p)) return;
+        attachedPages.add(p);
 
-      // Channel 1: In-page DOM form submit listener via exposed function
-      await page.exposeFunction('__athenaOnSamlSubmit', (data: { saml?: string; selectedRole?: string }) => {
-        log(`DOM channel fired: saml=${data?.saml ? `${data.saml.length} chars` : 'NONE'}, selectedRole=${data?.selectedRole || 'NONE'}, resolved=${resolved}`);
-        if (resolved || !data || !data.saml) {
-          log('DOM channel: skipping (resolved or no SAML data)');
-          return;
-        }
-        const saml = normalizeSamlBase64(data.saml);
-        capturedSaml = saml;
-        availableRoles = parseRolesFromSaml(saml);
-        log(`DOM channel: parsed ${availableRoles.length} roles`);
-
-        if (data.selectedRole) {
-          const selectedRoleArn = data.selectedRole.includes(':role/')
-            ? data.selectedRole.split(',').find(p => p.includes(':role/')) || data.selectedRole
-            : data.selectedRole;
-          log(`DOM channel: selectedRole parsed as ${selectedRoleArn}`);
-          const matched = availableRoles.find(r => r.roleArn === selectedRoleArn || r.roleArn.endsWith(`/${selectedRoleArn}`));
-          if (matched) {
-            log(`DOM channel: matched role ${matched.roleArn}, calling assumeRole`);
-            assumeRole(matched.roleArn, matched.principalArn, saml).catch(e => log(`DOM assumeRole floating rejection (safe): ${e.message}`));
-            return;
-          } else if (availableRoles.length > 0) {
-            log(`DOM channel: no exact match, falling back to first role ${availableRoles[0].roleArn}`);
-            assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, saml).catch(e => log(`DOM assumeRole floating rejection (safe): ${e.message}`));
-            return;
-          }
-        } else if (availableRoles.length === 1) {
-          log(`DOM channel: single role, auto-selecting ${availableRoles[0].roleArn}`);
-          assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, saml).catch(e => log(`DOM assumeRole floating rejection (safe): ${e.message}`));
-          return;
-        } else if (availableRoles.length > 1) {
-          log(`DOM channel: ${availableRoles.length} roles, waiting for user to pick one`);
-        }
-      });
-
-      // Inject DOM interceptor on every new document (persists across navigations)
-      await page.evaluateOnNewDocument(`
-        (function() {
-          function attachListeners() {
-            var forms = document.querySelectorAll('form');
-            forms.forEach(function(form) {
-              form.addEventListener('submit', function() {
-                var samlInput = form.querySelector('input[name="SAMLResponse"]');
-                var roleInput = form.querySelector('input[name="roleIndex"]:checked') ||
-                                form.querySelector('input[name="roleIndex"]');
-                if (samlInput && samlInput.value && window.__athenaOnSamlSubmit) {
-                  window.__athenaOnSamlSubmit({
-                    saml: samlInput.value,
-                    selectedRole: roleInput ? roleInput.value : undefined
-                  });
-                }
-              }, true);
-            });
-
-            var signinBtn = document.querySelector('#signin_button, button[type=submit], input[type=submit]');
-            if (signinBtn) {
-              signinBtn.addEventListener('click', function() {
-                var samlInput = document.querySelector('input[name="SAMLResponse"]');
-                var roleInput = document.querySelector('input[name="roleIndex"]:checked');
-                if (samlInput && samlInput.value && window.__athenaOnSamlSubmit) {
-                  window.__athenaOnSamlSubmit({
-                    saml: samlInput.value,
-                    selectedRole: roleInput ? roleInput.value : undefined
-                  });
-                }
-              }, true);
-            }
-          }
-
-          if (document.readyState === 'loading') {
-            window.addEventListener('DOMContentLoaded', attachListeners);
-          } else {
-            attachListeners();
-          }
-        })();
-      `);
-
-      // Passively monitor page frame navigations to detect AWS role selection page
-      page.on('framenavigated', async (frame) => {
-        if (resolved || frame !== page.mainFrame()) return;
-        const frameUrl = frame.url();
-        log(`Frame navigated: ${frameUrl.substring(0, 80)}`);
-        if (frameUrl.includes('signin.aws.amazon.com/saml')) {
+        p.on('request', async (req: any) => {
+          if (resolved) return;
           try {
-            const domSaml = await page.evaluate(
-              'document.querySelector("input[name=\\"SAMLResponse\\"]") ? document.querySelector("input[name=\\"SAMLResponse\\"]").value : null'
-            ) as string | null;
-            log(`Frame nav DOM probe: saml=${domSaml ? `${domSaml.length} chars` : 'null'}, capturedSaml=${capturedSaml ? 'yes' : 'no'}`);
-            if (domSaml && !capturedSaml) {
-              capturedSaml = normalizeSamlBase64(domSaml);
-              availableRoles = parseRolesFromSaml(capturedSaml);
-              log(`Frame nav: parsed ${availableRoles.length} roles`);
-              if (availableRoles.length === 1) {
-                assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, capturedSaml).catch(e => log(`Frame assumeRole floating rejection (safe): ${e.message}`));
-              } else if (availableRoles.length > 1) {
-                log(`Frame nav: multiple roles, waiting for selection`);
+            const reqUrl = req.url();
+            const method = req.method();
+
+            if (reqUrl.includes('signin.aws.amazon.com/saml') && method === 'POST') {
+              const postData = req.postData();
+              if (!postData) return;
+
+              const params = new URLSearchParams(postData);
+              const rawSaml = params.get('SAMLResponse');
+              const roleIndex = params.get('roleIndex');
+
+              log(`Request listener: SAML POST detected (hasSaml=${!!rawSaml}, roleIndex=${roleIndex || 'none'})`);
+
+              if (rawSaml) {
+                capturedSaml = normalizeSamlBase64(rawSaml);
+                availableRoles = parseRolesFromSaml(capturedSaml);
+                log(`Request listener: parsed ${availableRoles.length} roles from SAML assertion`);
+
+                // Single role auto-select
+                if (availableRoles.length === 1 && !roleIndex) {
+                  log(`Request listener: single role auto-select (${availableRoles[0].roleArn})`);
+                  await assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, capturedSaml);
+                  return;
+                }
+              }
+
+              // User selected a role and submitted form
+              if (roleIndex && capturedSaml) {
+                log(`Request listener: user submitted role ${roleIndex}`);
+                const cleanArn = roleIndex.includes(':role/')
+                  ? roleIndex.split(',').find((part: string) => part.includes(':role/')) || roleIndex
+                  : roleIndex;
+                const matched = availableRoles.find(r => r.roleArn === cleanArn || r.roleArn.endsWith(`/${cleanArn}`)) || availableRoles[0];
+                if (matched) {
+                  await assumeRole(matched.roleArn, matched.principalArn, capturedSaml);
+                  return;
+                }
               }
             }
           } catch (e: any) {
-            log(`Frame nav DOM probe error (safe): ${e.message}`);
+            log(`Request listener error (safe): ${e.message}`);
           }
-        }
-      });
+        });
+      };
 
-      // Channel 2: Passive CDP Network events (backup for network-level capture)
-      const cdpSession: CDPSession = await page.createCDPSession();
-      await cdpSession.send('Network.enable');
-
-      cdpSession.on('Network.requestWillBeSent', async (event: any) => {
+      // Channel 2: DOM & Navigation Watcher (Backup for role clicks & Console navigation)
+      let lastLoggedUrl = '';
+      const checkState = async () => {
         if (resolved) return;
+        try {
+          const currentPages = await browser.pages();
+          for (const p of currentPages) {
+            attachPageListeners(p);
 
-        const url: string = event.request?.url || '';
-        const method: string = event.request?.method || '';
-        let postData: string | undefined = event.request?.postData;
+            let pageUrl = '';
+            try { pageUrl = p.url(); } catch { continue; }
 
-        if (url.includes('signin.aws.amazon.com/saml') && method === 'POST') {
-          log(`CDP channel: POST to signin.aws.amazon.com/saml detected (postData=${postData ? `${postData.length} chars` : 'none'}, hasPostData=${event.request?.hasPostData})`);
-          // If postData was omitted in the event, fetch it via CDP
-          if (!postData && event.request?.hasPostData) {
-            try {
-              const res = await cdpSession.send('Network.getRequestPostData', { requestId: event.requestId });
-              postData = res.postData;
-              log(`CDP channel: fetched postData via getRequestPostData (${postData?.length || 0} chars)`);
-            } catch (e: any) {
-              log(`CDP channel: getRequestPostData failed: ${e.message}`);
+            if (pageUrl !== lastLoggedUrl && !pageUrl.startsWith('about:')) {
+              lastLoggedUrl = pageUrl;
+              log(`Browser navigated to: ${pageUrl.substring(0, 80)}`);
             }
-          }
 
-          if (postData) {
-            const params = new URLSearchParams(postData);
-            const rawSaml = params.get('SAMLResponse');
-            const roleIndex = params.get('roleIndex');
-            log(`CDP channel: SAMLResponse=${rawSaml ? `${rawSaml.length} chars` : 'none'}, roleIndex=${roleIndex || 'none'}`);
+            // Probe AWS SAML page for SAML assertion & role selection state
+            if (pageUrl.includes('signin.aws.amazon.com/saml')) {
+              try {
+                const domData = await p.evaluate(`(() => {
+                  if (!window.__athenaInjected) {
+                    window.__athenaInjected = true;
+                    window.__athenaSelectedRole = null;
+                    document.addEventListener('change', (e) => {
+                      if (e.target && e.target.name === 'roleIndex') window.__athenaSelectedRole = e.target.value;
+                    }, true);
+                  }
+                  const samlEl = document.querySelector('input[name="SAMLResponse"]');
+                  const checkedEl = document.querySelector('input[name="roleIndex"]:checked');
+                  return {
+                    saml: samlEl && samlEl.value ? samlEl.value : null,
+                    checkedRole: window.__athenaSelectedRole || (checkedEl ? checkedEl.value : null)
+                  };
+                })()`) as { saml: string | null; checkedRole: string | null } | null;
 
-            if (rawSaml) {
-              const saml = normalizeSamlBase64(rawSaml);
-              capturedSaml = saml;
-              availableRoles = parseRolesFromSaml(saml);
-              log(`CDP channel: parsed ${availableRoles.length} roles from SAMLResponse`);
+                if (domData?.saml && !capturedSaml) {
+                  capturedSaml = normalizeSamlBase64(domData.saml);
+                  availableRoles = parseRolesFromSaml(capturedSaml);
+                  log(`DOM watcher: captured SAML assertion (${capturedSaml.length} chars), found ${availableRoles.length} roles`);
 
-              // If only one role exists, assume immediately
-              if (availableRoles.length === 1) {
-                log(`CDP channel: single role, auto-selecting ${availableRoles[0].roleArn}`);
-                assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, saml).catch(e => log(`CDP assumeRole floating rejection (safe): ${e.message}`));
-                return;
-              } else if (availableRoles.length > 1) {
-                log(`CDP channel: ${availableRoles.length} roles, waiting for selection`);
+                  if (availableRoles.length === 1) {
+                    log(`DOM watcher: single role auto-select (${availableRoles[0].roleArn})`);
+                    await assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, capturedSaml);
+                    return;
+                  }
+                }
+
+                if (domData?.checkedRole && domData.checkedRole !== selectedRoleArn) {
+                  selectedRoleArn = domData.checkedRole;
+                  log(`DOM watcher: user selected role ${selectedRoleArn}`);
+                }
+              } catch {
+                // DOM probe can throw if page is actively submitting/unloading
               }
             }
 
-            // If user clicked a role on the AWS role selection page
-            if (roleIndex && capturedSaml) {
-              log(`CDP channel: role selection detected, roleIndex=${roleIndex}`);
-              const selectedRoleArn = roleIndex.includes(':role/')
-                ? roleIndex.split(',').find(p => p.includes(':role/')) || roleIndex
-                : roleIndex;
-              const matched = availableRoles.find(r => r.roleArn === selectedRoleArn || r.roleArn.endsWith(`/${selectedRoleArn}`));
-              if (matched) {
-                log(`CDP channel: matched role ${matched.roleArn}, calling assumeRole`);
-                assumeRole(matched.roleArn, matched.principalArn, capturedSaml).catch(e => log(`CDP assumeRole floating rejection (safe): ${e.message}`));
-                return;
-              } else if (availableRoles.length > 0) {
-                const idx = parseInt(roleIndex, 10);
-                if (!isNaN(idx) && availableRoles[idx]) {
-                  log(`CDP channel: using numeric index ${idx}`);
-                  assumeRole(availableRoles[idx].roleArn, availableRoles[idx].principalArn, capturedSaml).catch(e => log(`CDP assumeRole floating rejection (safe): ${e.message}`));
-                  return;
-                } else if (!isNaN(idx) && availableRoles[idx - 1]) {
-                  log(`CDP channel: using numeric index ${idx - 1} (adjusted)`);
-                  assumeRole(availableRoles[idx - 1].roleArn, availableRoles[idx - 1].principalArn, capturedSaml).catch(e => log(`CDP assumeRole floating rejection (safe): ${e.message}`));
+            // If browser reached AWS Console, finalize auth
+            if (
+              pageUrl.includes('.console.aws.amazon.com') ||
+              pageUrl.includes('/console/home') ||
+              pageUrl.includes('signin.aws.amazon.com/oauth')
+            ) {
+              if (capturedSaml && !resolved) {
+                log(`Navigation watcher: detected AWS Console (${pageUrl.substring(0, 70)})`);
+
+                let matchedRole: SamlRoleOption | undefined;
+                if (selectedRoleArn) {
+                  const cleanArn = selectedRoleArn.includes(':role/')
+                    ? selectedRoleArn.split(',').find(part => part.includes(':role/')) || selectedRoleArn
+                    : selectedRoleArn;
+                  matchedRole = availableRoles.find(r => r.roleArn === cleanArn || r.roleArn.endsWith(`/${cleanArn}`));
+                }
+                if (!matchedRole && availableRoles.length > 0) {
+                  matchedRole = availableRoles[0];
+                  log(`Navigation watcher: defaulting to first role (${matchedRole.roleArn})`);
+                }
+
+                if (matchedRole) {
+                  await assumeRole(matchedRole.roleArn, matchedRole.principalArn, capturedSaml);
                   return;
                 }
-                log(`CDP channel: no index match, falling back to first role`);
-                assumeRole(availableRoles[0].roleArn, availableRoles[0].principalArn, capturedSaml).catch(e => log(`CDP assumeRole floating rejection (safe): ${e.message}`));
-                return;
               }
             }
           }
+        } catch {
+          // Page or browser momentarily busy
+        }
+      };
+
+      // Attach to new targets immediately
+      browser.on('targetcreated', async (t: any) => {
+        if (t.type() === 'page') {
+          try {
+            const p = await t.page();
+            if (p) attachPageListeners(p);
+          } catch {}
         }
       });
+      browser.on('targetchanged', async () => {
+        await checkState();
+      });
 
-      log('Navigating to SAML login URL...');
+      // Sequential polling schedule (prevents overlapping CDP calls)
+      const scheduleNextPoll = () => {
+        if (resolved) return;
+        pollTimer = setTimeout(async () => {
+          await checkState();
+          scheduleNextPoll();
+        }, 300);
+      };
 
-      // Always navigate even if --app already loaded the URL, to ensure
-      // puppeteer fully owns the page lifecycle and CDP events fire properly.
-      await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      log('Page navigation complete');
+      // Initialize listeners on existing pages and kick off watcher
+      const initialPages = await browser.pages();
+      initialPages.forEach(attachPageListeners);
+      scheduleNextPoll();
+
+      log('Setup complete — waiting for SAML login in browser...');
     } catch (err: any) {
       log(`Setup error: ${err.message}`);
       if (!resolved) {
