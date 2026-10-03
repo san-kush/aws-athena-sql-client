@@ -4,6 +4,39 @@ Welcome to the release notes for **AWS Athena SQL Client**. Each release include
 
 ---
 
+## Version 0.1.3
+
+**Release Date:** October 3, 2026  
+**Artifact Package:** `aws-athena-sql-client-0.1.3.vsix`
+
+### 📦 Download Artifact
+- **[Download VSIX Artifact (v0.1.3)](https://github.com/san-kush/aws-athena-sql-client/releases/download/v0.1.3/aws-athena-sql-client-0.1.3.vsix)**
+- **File Name:** `aws-athena-sql-client-0.1.3.vsix`
+- **Release Tag:** [`v0.1.3`](https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.3)
+
+---
+
+### Highlights & Key Features
+
+#### 1. Robust SAML Browser Authentication
+- **Reliable Credential Capture**: Distinguishes intentional browser shutdowns from user aborts, preventing successful logins from reporting false `Browser closed before SAML authentication could complete` errors. Genuine AWS STS errors now surface transparently.
+- **Visible Frame Rendering**: Fixed blank white login windows on Windows by launching the browser detached and connecting via DevTools port, ensuring the native frame paints correctly.
+- **Direct DevTools Active Port Discovery**: Discovers the debugging port directly via `DevToolsActivePort` file, bypassing HTTP proxy interception inside the VS Code extension host that previously caused `Unexpected end of JSON input` or prompted users to log in twice.
+- **Direct Navigation Hand-Off**: Hands the login URL directly to the browser process via CLI arguments, preventing hangs on `about:blank`.
+- **Process & Profile Lifecycle Sweeper**: Cleanly terminates orphaned browser processes (including Edge singleton child processes) and sweeps temporary profiles.
+- **Fail-Fast Error & Crash Detection**: Detects renderer crashes, missing windows, and network failures (DNS/proxy/TLS) promptly instead of timing out silently after 5 minutes.
+
+#### 2. Dedicated "AWS Athena SQL Client" Output Channel
+- Real-time logging of authentication and query workflows (launch, navigation, role selection, STS calls, cleanup) with a 1-click **Show Log** action on error notifications.
+
+#### 3. Self-Contained Extension Packaging & Security Hardening
+- **Bundled Runtime Dependencies**: Bundles runtime requirements so SAML authentication works out-of-the-box in standalone `.vsix` installations without external `node_modules`.
+- **Browser Sandbox Enabled**: Removed `--no-sandbox` to run browser authentication within standard sandbox protections.
+- **Browser Preference**: Automatically detects and prioritizes Google Chrome over Microsoft Edge.
+- **Refreshed Visual Identity**: New icons across Marketplace and Activity Bar.
+
+---
+
 ## Version 0.1.2
 
 **Release Date:** September 21, 2026  
