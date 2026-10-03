@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.3] - 2026-10-03
+
+### Fixed
+- **Browser SAML Login — credentials were discarded on success**: A successful login always reported `Browser closed before SAML authentication could complete`. Closing the browser fired puppeteer's `disconnected` event, and the handler settled the promise as an error before the credentials could be returned. Intentional shutdowns are now distinguished from the user closing the window, so the result is delivered. The same race was also replacing every genuine error message, so AWS/STS failures now surface their real cause.
+- **Blank white login window**: The login window opened unpainted, with no tab strip or address bar, making it impossible to sign in. `puppeteer.launch()` spawns the browser as an attached child with piped stdio, which on Windows produces a browser whose window never presents a frame — CDP responded, navigation returned HTTP 200, and screenshots rendered correctly, but nothing was drawn. The browser is now started the way a normal application launch does (detached) and attached to over its debugging port.
+- **Login window stuck on `about:blank`**: Immediately after attaching, a page target can exist while still reporting an empty URL; navigating it in that state hung silently with no error. The login URL is now handed to the browser on its command line so the browser performs the first navigation itself.
+- **`Unexpected end of JSON input` and being asked to sign in twice**: The browser's debugging endpoint was discovered over HTTP, which fails inside the VS Code extension host because it applies its own proxy handling to Node's HTTP module. After a 45 second wait the extension killed the browser mid-login and reopened the flow in a second browser. Discovery now reads the browser's `DevToolsActivePort` file directly — no HTTP involved — and the fallback to a second browser only happens when a browser fails to start at all, never once a window is on screen.
+- **Orphaned browser windows**: A failed login could leave a browser window open with no way to close it, because Microsoft Edge relaunches itself and the originally spawned process had already exited. Cleanup now also sweeps any browser process still using the login's temporary profile, and stale profiles are removed.
+- **Login no longer hangs**: Added renderer-crash detection, a watchdog for the window disappearing without the browser exiting, and reporting of network failures (DNS, proxy, TLS) with the browser's actual error code. Previously any of these left the login spinning for the full five minute timeout with no explanation.
+
+### Added
+- **"AWS Athena SQL Client" output channel**: Each step of the browser login (launch, navigation, role selection, STS call, cleanup) is written to a dedicated output channel, and failures offer a **Show Log** button.
+
+### Changed
+- **New extension icon**: Refreshed Marketplace and Activity Bar icons.
+- **Packaging — the extension is now self-contained**: `puppeteer-core` was marked as an external at build time while `node_modules` is excluded from the `.vsix`, so browser SAML login would have failed with `Cannot find module 'puppeteer-core'` in an installed extension even though it worked under F5 debugging. All runtime dependencies are now bundled, and a `vscode:prepublish` step guarantees the published bundle is a fresh production build.
+- Browser detection now prefers Google Chrome over Microsoft Edge, matching the previously documented intent.
+- Dropped `--no-sandbox` from the browser launch (added in 0.1.2), so the browser sandbox stays enabled.
+
+### Removed
+- Unused `open` dependency.
+
+---
+
 ## [0.1.2] - 2026-09-21
 
 ### Added
@@ -77,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.1.3]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.3
 [0.1.2]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.2
 [0.1.1]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.1
 [0.1.0]: https://github.com/san-kush/aws-athena-sql-client/releases/tag/v0.1.0

@@ -7,10 +7,15 @@ const buildOptions = {
   entryPoints: ['src/extension.ts'],
   bundle: true,
   outfile: 'dist/extension.js',
-  external: ['vscode', 'puppeteer-core', 'open'],
+  // Only 'vscode' is provided by the host at runtime. Everything else must be
+  // bundled: .vscodeignore excludes node_modules from the .vsix, so anything
+  // left external would resolve at runtime in development but throw
+  // "Cannot find module" in an installed extension.
+  external: ['vscode'],
   format: 'cjs',
   platform: 'node',
-  sourcemap: true,
+  target: 'node18',
+  sourcemap: !production,
   minify: production,
 };
 
@@ -20,5 +25,5 @@ if (watch) {
   console.log('Watching for changes...');
 } else {
   await esbuild.build(buildOptions);
-  console.log('Build complete.');
+  console.log(`Build complete${production ? ' (production)' : ''}.`);
 }

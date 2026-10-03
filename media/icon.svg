@@ -1,12 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Amazon Athena Query Symbol -->
-  <circle cx="10.5" cy="10.5" r="7.5" />
-  <line x1="16" y1="16" x2="21.5" y2="21.5" stroke-width="2.2" />
-  <!-- Query / Data nodes -->
-  <circle cx="8.5" cy="11" r="1" fill="currentColor" stroke="none" />
-  <circle cx="12.5" cy="8.5" r="1" fill="currentColor" stroke="none" />
-  <circle cx="12" cy="13.5" r="1" fill="currentColor" stroke="none" />
-  <line x1="8.5" y1="11" x2="12.5" y2="8.5" stroke-width="1" />
-  <line x1="8.5" y1="11" x2="12" y2="13.5" stroke-width="1" />
-  <line x1="12.5" y1="8.5" x2="12" y2="13.5" stroke-width="1" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <!--
+    Activity Bar icon: an S3 bucket under a magnifying glass.
+
+    Deliberately transparent and single-colour. VS Code renders this file as a
+    mask and recolours it to match the active theme, so a background fill or any
+    additional colours would be thrown away. The full-colour version of the same
+    glyph, on the #8C4FFF tile, is media/icon.png for the Marketplace listing.
+
+    Geometry (before the centring translate): lens centred at (190,175) with a
+    112r rim broken between 161.5deg and 199.6deg to let the scan lines through,
+    a 72r inner ring, and an open-ended capsule handle whose sides begin on the
+    rim so the join reads cleanly.
+  -->
+  <g transform="translate(6,8)">
+    <!-- Magnifier rim, broken on the left for the scan lines -->
+    <path d="M84.5,137.3 A112,112 0 0 1 302,175 A112,112 0 0 1 83.8,210.5" stroke-width="15"/>
+
+    <!-- Inner lens ring -->
+    <circle cx="190" cy="175" r="72" stroke-width="13"/>
+
+    <!-- Scan lines -->
+    <g stroke-width="15" stroke-linecap="butt">
+      <line x1="58" y1="147" x2="106" y2="147"/>
+      <line x1="50" y1="175" x2="106" y2="175"/>
+      <line x1="62" y1="205" x2="106" y2="205"/>
+    </g>
+
+    <!-- Handle -->
+    <path d="M281.5,239.7 L332.8,291 A19,19 0 0 1 306,317.8 L254.7,266.5" stroke-width="15"/>
+
+    <!-- Bucket -->
+    <path d="M152,137 L166,216 A24,8 0 0 0 214,216 L228,137" stroke-width="11"/>
+    <ellipse cx="190" cy="137" rx="38" ry="11" stroke-width="11"/>
+    <line x1="158" y1="156" x2="236" y2="183" stroke-width="9"/>
+    <circle cx="196" cy="169" r="6" fill="currentColor" stroke="none"/>
+  </g>
 </svg>

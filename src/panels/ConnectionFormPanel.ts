@@ -4,6 +4,7 @@ import type { ConnectionManager } from '../services/ConnectionManager';
 import { AthenaClientService } from '../services/AthenaClientService';
 import type { ConnectionConfig, ConnectionSecrets } from '../models/types';
 import { executeSamlLogin } from '../services/SamlAuthService';
+import { logLine, showErrorWithLog } from '../utils/logger';
 import * as crypto from 'crypto';
 
 export class ConnectionFormPanel {
@@ -149,11 +150,13 @@ export class ConnectionFormPanel {
                         }
 
                         try {
+                            logLine(`[SAML] Starting browser login for ${samlUrl} (region ${region})`);
                             const authResult = await executeSamlLogin(samlUrl, region, (msg) => {
                                 this._panel.webview.postMessage({
                                     command: 'samlProgress',
                                     message: msg
                                 });
+                                logLine(`[SAML] ${msg}`);
                             });
 
                             this._panel.webview.postMessage({
@@ -169,7 +172,7 @@ export class ConnectionFormPanel {
                                 success: false,
                                 message: samlErr.message || 'SAML login failed.'
                             });
-                            vscode.window.showErrorMessage(`SAML login failed: ${samlErr.message}`);
+                            await showErrorWithLog(`SAML login failed: ${samlErr.message}`);
                         }
                         break;
                     }

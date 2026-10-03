@@ -73,17 +73,36 @@ A lightweight, production-ready Visual Studio Code extension for **Amazon Athena
   - **Default Credential Chain**: Standard AWS SDK provider chain (environment variables, IAM roles, ECS/EC2 metadata).
   - **AWS Profile**: Use local profiles configured in `~/.aws/credentials` and `~/.aws/config`.
   - **Access Key ID & Secret Key**: Securely stored using VS Code `SecretStorage` with OS-level keychain encryption.
-  - **Interactive Browser SAML Login**: Automated login for Okta, Azure AD / Entra ID, Ping Identity, etc. Launches your system browser (Edge/Chrome), intercepts role selection, acquires STS credentials, and auto-closes the browser window.
+  - **Interactive Browser SAML Login**: Automated login for Okta, Azure AD / Entra ID, Ping Identity, etc. Opens a single clean browser window (Chrome, falling back to Edge) using a throwaway profile, lets you sign in normally including MFA, captures the SAML assertion and your chosen role, exchanges them for temporary STS credentials, then closes the window for you. Credentials are stored in VS Code's encrypted secret storage and expired sessions prompt for 1-click re-authentication.
   - **AWS IAM Identity Center (SSO)**: Direct authentication via AWS SSO Start URL and AWS IAM Identity Center.
 
 ![Authentication Methods](media/screenshots/auth-methods.png)
+![SAML Authentication](media/screenshots/connection-manager-saml.png)
 
 ---
 
 ## 🔒 Security & Best Practices
 - **Credentials Protection**: Sensitive AWS keys are stored strictly in VS Code `SecretStorage` (`context.secrets`) using OS-level keychain encryption. Non-sensitive configurations are stored in `globalState`.
 - **Content Security Policy (CSP)**: All Webviews use strict CSP meta tags with unique cryptographic nonces.
-- **Zero Heavy Runtimes**: Pure TypeScript and lightweight AWS SDK v3 modular packages without unnecessary chromium or heavy browser dependencies.
+- **Zero Heavy Runtimes**: Pure TypeScript and lightweight AWS SDK v3 modular packages. Browser SAML login drives the Chrome or Edge you already have installed — no Chromium download, and nothing is added to your everyday browser profile, since each login runs in a temporary profile that is deleted afterwards.
+- **Sandbox Intact**: The login browser runs with its own sandbox enabled and is used for nothing but the SSO handshake.
+
+---
+
+## 🧰 Troubleshooting Browser SAML Login
+
+Every step of the login is written to a dedicated output channel. Open **View → Output** and pick **AWS Athena SQL Client** from the dropdown, or press **Show Log** on any error notification.
+
+The log reports the browser it launched, the page it opened, the roles it found in the assertion, the role you selected, and the STS call. A few things it will tell you directly:
+
+| Log message | Meaning |
+|---|---|
+| `Browser ready with 1 page(s): "https://..."` | The login page loaded. If the URL here is not your identity provider, check the SAML URL on the connection. |
+| `The browser could not reach the SAML URL: ...` | A DNS, proxy, or TLS failure, with the browser's own error code. |
+| `Could not start <browser> for the SAML login` | The browser started but never exposed its debugging endpoint. On a managed machine this is usually Chrome's `RemoteDebuggingAllowed` group policy. |
+| `parsed N roles from SAML assertion` | The assertion was captured. If `N` is 0, the identity provider returned no AWS role attributes. |
+
+A SAML login waits up to five minutes for you to finish signing in, and reports a clear reason if the window is closed or crashes rather than waiting silently.
 
 ---
 
