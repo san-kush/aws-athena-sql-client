@@ -1,0 +1,147 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target_tag:
+        description: 'Optional: Release a specific tag (e.g. v0.1.3, v0.1.2). Leave empty to use package.json version.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Tag, Release & Version Bump
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check version and determine release
+        id: check_version
+        run: |
+          git fetch --tags --force
+          
+          TARGET_TAG="${{ github.event.inputs.target_tag }}"
+          
+          if [ -n "$TARGET_TAG" ]; then
+            echo "Manual release requested for tag: $TARGET_TAG"
+            VERSION="${TARGET_TAG#v}"
+            TAG="v$VERSION"
+            if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "Error: Tag $TAG does not exist."
+              exit 1
+            fi
+            
+            gh release view "$TAG" >/dev/null 2>&1 && RELEASE_EXISTS=true || RELEASE_EXISTS=false
+            if [ "$RELEASE_EXISTS" = "true" ]; then
+              echo "Release already exists for $TAG."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+              echo "should_create_tag=false" >> "$GITHUB_OUTPUT"
+              echo "should_bump_version=false" >> "$GITHUB_OUTPUT"
+              echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+              echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            TAG="v$VERSION"
+            echo "Detected package.json version: $VERSION"
+            
+            if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "Tag $TAG already exists in git."
+              gh release view "$TAG" >/dev/null 2>&1 && RELEASE_EXISTS=true || RELEASE_EXISTS=false
+              if [ "$RELEASE_EXISTS" = "true" ]; then
+                echo "Release already exists for $TAG. Nothing to do."
+                echo "should_release=false" >> "$GITHUB_OUTPUT"
+              else
+                echo "Tag $TAG exists but GitHub Release is missing! Proceeding to create release."
+                echo "should_release=true" >> "$GITHUB_OUTPUT"
+                echo "should_create_tag=false" >> "$GITHUB_OUTPUT"
+                echo "should_bump_version=true" >> "$GITHUB_OUTPUT"
+                echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+              fi
+            else
+              echo "New version $VERSION detected. Ready to tag, release, and bump."
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+              echo "should_create_tag=true" >> "$GITHUB_OUTPUT"
+              echo "should_bump_version=true" >> "$GITHUB_OUTPUT"
+              echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+              echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Create and push Git tag
+        if: steps.check_version.outputs.should_release == 'true' && steps.check_version.outputs.should_create_tag == 'true'
+        run: |
+          TAG="${{ steps.check_version.outputs.tag }}"
+          echo "Creating and pushing tag $TAG..."
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "release: $TAG"
+          git push origin "$TAG"
+          echo "Tag $TAG pushed successfully."
+
+      - name: Build and Package Extension (.vsix)
+        if: steps.check_version.outputs.should_release == 'true'
+        run: |
+          npm run vscode:prepublish
+          npm run package -- --no-dependencies
+
+      - name: Extract Release Notes
+        if: steps.check_version.outputs.should_release == 'true'
+        run: |
+          node scripts/extract-release-notes.js "${{ steps.check_version.outputs.version }}" release-notes.md
+
+      - name: Create GitHub Release
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.check_version.outputs.tag }}
+          name: AWS Athena SQL Client ${{ steps.check_version.outputs.tag }}
+          body_path: release-notes.md
+          files: aws-athena-sql-client-*.vsix
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Bump version in package.json
+        if: steps.check_version.outputs.should_release == 'true' && steps.check_version.outputs.should_bump_version == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Switch to main and sync
+          git checkout main
+          git pull origin main --rebase
+          
+          # Increment patch version (e.g. 0.1.3 -> 0.1.4)
+          npm version patch --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "Updated package.json to new development version: $NEW_VERSION"
+          
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push origin main
