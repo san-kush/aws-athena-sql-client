@@ -12,6 +12,7 @@ import { runQuery } from './commands/runQuery';
 import { cancelQuery } from './commands/cancelQuery';
 import { previewTable, showTableDdl } from './commands/tableActions';
 import * as constants from './utils/constants';
+import { getLogChannel, logLine, showErrorWithLog } from './utils/logger';
 import type { ConnectionTreeItem } from './providers/ConnectionsTreeProvider';
 import type { CatalogTreeItem } from './providers/CatalogTreeProvider';
 import type { SavedQueryTreeItem } from './providers/SavedQueriesTreeProvider';
@@ -36,6 +37,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.languages.registerCodeLensProvider({ language: 'sql' }, codeLensProvider);
 
     context.subscriptions.push(
+        getLogChannel(),
+
         // ─── Connection Commands ──────────────────────────────────────────
         vscode.commands.registerCommand(constants.CMD_ADD_CONNECTION, () => {
             ConnectionFormPanel.createOrShow(context.extensionUri, connectionManager, athenaService);
@@ -73,6 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
                         }, async (progress) => {
                             return await executeSamlLogin(item.config.samlUrl!, item.config.region, (statusMsg) => {
                                 progress.report({ message: statusMsg });
+                                logLine(`[SAML] ${statusMsg}`);
                             });
                         });
                         secrets = {
@@ -92,7 +96,7 @@ export function activate(context: vscode.ExtensionContext) {
                 catalogProvider.refresh();
                 vscode.window.showInformationMessage(`Connected to ${item.config.name}`);
             } catch (error: any) {
-                vscode.window.showErrorMessage(`Failed to connect: ${error.message}`);
+                await showErrorWithLog(`Failed to connect: ${error.message}`);
             }
         }),
         vscode.commands.registerCommand(constants.CMD_DISCONNECT, () => {
