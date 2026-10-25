@@ -1,14 +1,19 @@
-# AWS Athena SQL Client
+<div align="center">
+  <img src="media/icon.png" width="128" height="128" alt="AWS Athena SQL Client Logo"/>
+  <h1>AWS Athena SQL Client</h1>
+  <h6>A Sankush Technologies product</h6>
+    <b>AWS Athena SQL Client</b> A lightweight, production-ready Visual Studio Code extension for <b>Amazon Athena</b> and <b>AWS Glue Data Catalog</b>. Query data lakes, browse catalogs and schemas, manage multiple connections with Browser SSO/IAM, track query history with pagination, and inspect results with built-in export capabilities.
+<br/>
+<br/>
 
-[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/sankush.aws-athena-sql-client?label=VS%20Code%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=sankush.aws-athena-sql-client)
-[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/sankush.aws-athena-sql-client)](https://marketplace.visualstudio.com/items?itemName=sankush.aws-athena-sql-client)
+[![Visual Studio Marketplace](https://img.shields.io/badge/Visual%20Studio%20Marketplace-AWS%20Athena%20SQL%20Client%20-blue)](https://marketplace.visualstudio.com/items?itemName=sankush.aws-athena-sql-client)
+[![Open VSX Registry](https://img.shields.io/badge/Open%20VSX%20Registry-AWS%20Athena%20SQL%20Client%20-purple)](https://open-vsx.org/extension/sankush/aws-athena-sql-client)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A lightweight, production-ready Visual Studio Code extension for **Amazon Athena** and **AWS Glue Data Catalog**. Query data lakes, browse catalogs and schemas, manage multiple connections with Browser SSO/IAM, track query history with pagination, and inspect results with built-in export capabilities.
-
-![AWS Athena SQL Client - Query Execution and Results](media/screenshots/query-execution-and-results.png)
+</div>
 
 ---
+
 
 ## 🌟 Key Features
 
